@@ -1,0 +1,156 @@
+################################################################################
+############                Fluid fuels consumption                ############
+################################################################################
+
+
+# Information about the data ----------------------------------------------
+
+## Liquid fuels total consumption for agriculture sector
+## Data was downloaded from UNFCC website on 10/21/2022.
+# UNFCC : [Agriculture/Forestry/Fishing][Liquid Fuels]
+# 1.  Energy
+# → 1.AA  Fuel Combustion - Sectoral approach
+# → 1.A.4  Other Sectors
+# → 1.A.4.c  Agriculture/Forestry/Fishing
+# → 1.A.4.c.ii  Off-road vehicles and other machinery
+# or
+
+# Import data -------------------------------------------------------------
+# Install and load a few libraries
+if (!require("tidyverse")) install.packages("tidyverse") # Data import and manipulation
+library(tidyverse)
+if (!require("readxl")) install.packages("readxl")
+library(readxl)
+if (!require("stringr")) install.packages("stringr") # Strings manipulation
+library(stringr)
+
+# Liquid fuels data
+LF_total <- read_excel("data-raw/ref_fuel/AFF_Liquid_Fuels.xlsx",
+                           sheet = "Time-series", skip = 7)
+
+LF_offroad <- read_excel("data-raw/ref_fuel/AFF_Liquid_Fuels.xlsx",
+                             sheet = "Off-road", skip = 7)
+
+# Clean -------------------------------------------------------------------
+
+# Clean country label and var type
+# Keep only Years 2004 to 2019 and countries from FADN
+
+LF_total <-
+  LF_total %>%
+  mutate(country = substr(Submissions, 1, 3)) %>%
+  select(country, all_of(as.character(2004:2019))) %>%
+  mutate_at(as.character(2004:2019), function(x){as.numeric(as.character(x))}) %>%
+  filter(country %in% farmsty::ref_country$country_code)
+
+LF_offroad <-
+  LF_offroad %>%
+  mutate(country = substr(Submissions, 1, 3)) %>%
+  select(country, all_of(as.character(2004:2019))) %>%
+  mutate_at(as.character(2004:2019), function(x){as.numeric(as.character(x))}) %>%
+  filter(country %in% farmsty::ref_country$country_code)
+
+# We use LF_offroad values when available and LF_total when not available
+# Data is missing for CYP and ROU only and for other similar countries,
+# ratio off-road vehicule consumption / total liquide fuels conso is close to 1
+# For ROU we assume that it is similar to BGR ie mean ratio = 0.99
+
+ref_fuel <- LF_offroad
+
+ref_fuel[ref_fuel$country == "CYP",] <- LF_total[LF_total$country == "CYP",]
+ref_fuel[ref_fuel$country == "ROU",] <- LF_total[LF_total$country == "ROU",]
+
+ref_fuel <- ref_fuel %>%
+  pivot_longer(!country, names_to = "year", values_to = "fuel_motors") %>%
+  # add FADN country code
+  right_join(farmsty::ref_country[, c("country_code", "country_fadn")], by = c("country" = "country_code"))
+
+# For ROU we assume that off-road vehicule consumption in total is similar to BGR ie mean ratio = 0.99
+ref_fuel$fuel_motors[ref_fuel$country_fadn == "ROU"] <- 0.99 * ref_fuel$fuel_motors[ref_fuel$country_fadn == "ROU"]
+
+# For CYP we assume that off-road vehicule consumption in total is similar to MLT ie mean ratio = 0.99
+ref_fuel$fuel_motors[ref_fuel$country_fadn == "CYP"] <- 0.48 * ref_fuel$fuel_motors[ref_fuel$country_fadn == "CYP"]
+
+rm(LF_total, LF_offroad)
+
+################################################################################
+############                   Motor fuels price                    ############
+################################################################################
+
+# From the data of the national inventories and the FADN,
+# we derive the price per country and year.
+
+
+# Total consumption -------------------------------------------------------
+
+# ref_fuel <- farmsty:::ref_fuel
+
+
+# Total spending ----------------------------------------------------------
+
+# LIFT (2004-2009)
+# load("~/GitHub/farmsty/data_ignore/fadn_LIFT_2004_2018.RData")
+#
+# data_lift <- data_lift %>%
+#   select(COUNTRY, YEAR, SYS02, IFULS_V) %>%
+#   filter(YEAR < 2010) %>%
+#   mutate(IFULS_COEF = IFULS_V * SYS02) %>%
+#   group_by(COUNTRY, YEAR) %>%
+#   summarise(value_motors = sum(IFULS_COEF, na.rm = TRUE))
+
+# EEORG (2010-2019)
+# load("~/GitHub/farmsty/data_ignore/fadn_EEORG_2010_2019.RData")
+
+# data_eeorg <- data_eeorg %>%
+#   select(COUNTRY, YEAR, SYS02, IFULS_V) %>%
+#   # filter(YEAR == 2019) %>%
+#   mutate(IFULS_COEF = IFULS_V * SYS02) %>%
+#   group_by(COUNTRY, YEAR) %>%
+#   summarise(value_motors = sum(IFULS_COEF, na.rm = TRUE))
+
+# data_lift %>%
+#   select(COUNTRY, YEAR, SYS02, SE025, IFULS_V, TF8) %>%
+#   # filter(TF8 == "1", COUNTRY == "FRA") %>%
+#   # filter(IFULS_V == 0) %>%
+#   filter(YEAR %in% 2010:2016) %>%
+#   # group_by(COUNTRY, YEAR) %>%
+#   summarise(n = n(),
+#             weight = sum(SYS02),
+#             ha = sum(SE025),
+#             ha_extra = sum(SYS02 * SE025))
+
+# Merge
+# value_motor <- bind_rows(data_lift, data_eeorg) %>%
+  # mutate(YEAR = as.character(YEAR))
+#
+# saveRDS(value_motor, file = "data-raw/ref_fuel/value_motor.rds")
+
+# loading the table generated by the code commented above
+value_motor <- readRDS("data-raw/ref_fuel/value_motor.rds")
+
+# Add to ref_fuel
+ref_fuel <- ref_fuel %>%
+  left_join(value_motor, by = c("country_fadn" = "COUNTRY", "year" = "YEAR"))
+
+# price_motors (EUR/TJ)
+ref_fuel <- ref_fuel %>%
+  mutate(price_motors = fuel_motors / value_motors) %>%
+  # 1TJ = 1 000 000 MJ
+  # 37.9 MJ / Litre
+  mutate(price_motors_EURl = price_motors * 1000000/37.9)
+
+rm(value_motor)
+
+################################################################################
+############                   Heating fuels conso                  ############
+################################################################################
+
+
+
+################################################################################
+############                   Heating fuels price                  ############
+################################################################################
+
+# Add data to the package -------------------------------------------------
+# source("data-raw/internal_data.R")
+# usethis::use_data(ref_fuel, internal = TRUE, overwrite = TRUE)

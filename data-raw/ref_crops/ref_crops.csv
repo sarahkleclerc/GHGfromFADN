@@ -1,0 +1,95 @@
+crop_ha;crop_yield;crop_desc;crop_fadn;crop_ipcc
+CAPL_TA;CAPL_PRQ;Apples ;CAPL;fruits and vegetables
+CARALNDSED_TA;CARALNDSED_PRQ;Arable land seed and seedlings ;CARALNDSED;grains
+CARAOTH_TA;CARAOTH_PRQ;Other arable land crops ;CARAOTH;grains
+CBERRY_TA;CBERRY_PRQ;Berry species ;CBERRY;fruits and vegetables
+CCEROTH_TA;CCEROTH_PRQ;Other cereals for the production of grain ;CCEROTH;grains
+CCFL_TA;CCFL_PRQ;Cauliflower and broccoli ;CCFL;fruits and vegetables
+CCITROTH_TA;CCITROTH_PRQ;Other citrus fruit ;CCITROTH;fruits and vegetables
+CCITRSML_TA;CCITRSML_PRQ;Tangerines, mandarins, clementines and similar ;CCITRSML;fruits and vegetables
+CCOTN_TA;CCOTN_PRQ;Cotton ;CCOTN;grains
+CCRNSWT_TA;CCRNSWT_PRQ;Sweet corn ;CCRNSWT;maize
+CCRPINDOTH_TA;CCRPINDOTH_PRQ;Other industrial crops not mentioned elsewhere ;CCRPINDOTH;grains
+CCRPOILOTH_TA;CCRPOILOTH_PRQ;Other oil seed crops ;CCRPOILOTH;grains
+CCRPPERMOTH_TA;;Other permanent crops ;CCRPPERMOTH;fruits and vegetables
+CCRPPROTOTH_TA;CCRPPROTOTH_PRQ;Other protein crops ;CCRPPROTOTH;beans and pulses
+CCRT_TA;CCRT_PRQ;Carrots ;CCRT;tubers
+CFIBOTH_TA;CFIBOTH_PRQ;Other fibre plants ;CFIBOTH;grains
+CFLAX_TA;CFLAX_PRQ;Flax ;CFLAX;grains
+CFLNDNOSUB_TA;CFLNDNOSUB_PRQ;Fallow land without any subsidies ;CFLNDNOSUB;perenial grasses
+CFLNDSUB_TA;;Fallow land subject to the payment of subs no econ use ;CFLNDSUB;perenial grasses
+CFLW_TA;;Flowering and ornamental plants. ;CFLW;tubers
+CFLWB_TA;;Flower bulbs, corms and tubers. ;CFLWB;tubers
+CFLWCUT_TA;;Cut flowers and flower buds ;CFLWCUT;tubers
+CFLWOUT_TA;;Flowers and ornamental plants Outdoor ;CFLWOUT;tubers
+CFLWUG_TA;;Flowers and ornamental plants Under glass ;CFLWUG;tubers
+CFODMZ_TA;CFODMZ_PRQ;Green maize ;CFODMZ;maize
+CFODOTH_TA;CFODOTH_PRQ;Other plants harvested green not mentioned elsewh ;CFODOTH;grains
+CFODRTBR_TA;CFODRTBR_PRQ;Fodder roots and brassicas (excluding seed) ;CFODRTBR;fruits and vegetables
+CFRUTTMP_TA;CFRUTTMP_PRQ;Other fruit of temperate zones ;CFRUTTMP;fruits and vegetables
+CFRUTTRPL_TA;CFRUTTRPL_PRQ;Fruit of subtropical or tropical zones ;CFRUTTRPL;fruits and vegetables
+CGRLC_TA;CGRLC_PRQ;Garlic ;CGRLC;tubers
+CGRPTAB_TA;CGRPTAB_PRQ;Table grapes ;CGRPTAB;fruits and vegetables
+CGRPWINOTH_TA;CGRPWINOTH_PRQ;Grapes for other wines ;CGRPWINOTH;fruits and vegetables
+CGRPWINPDO_TA;CGRPWINPDO_PRQ;Grapes for quality wine with PDO ;CGRPWINPDO;fruits and vegetables
+CGRPWINPGI_TA;CGRPWINPGI_PRQ;Grapes for quality wine with PGI ;CGRPWINPGI;fruits and vegetables
+CGRSNOUSESUB_TA;;Perm grassland not used for prod and eligible for subs ;CGRSNOUSESUB;perenial grasses
+CGRSTMP_TA;CGRSTMP_PRQ;Temporary grass ;CGRSTMP;perenial grasses
+CGRSXRG_TA;CGRSXRG_PRQ;Pasture and meadow, excluding rough grazings ;CGRSXRG;perenial grasses
+CHEMP_TA;CHEMP_PRQ;Hemp ;CHEMP;grains
+CKGAR_TA;;Kitchen gardens ;CKGAR;fruits and vegetables
+CLEG_TA;CLEG_PRQ;Leguminous plants ;CLEG;beans and pulses
+CLINSED_TA;CLINSED_PRQ;Linseed (oil flax) ;CLINSED;grains
+CLMON_TA;CLMON_PRQ;Lemons ;CLMON;fruits and vegetables
+CLNDOTH_TA;;Other land ;CLNDOTH;grains
+CLNDREADSOW_TA;;Land ready for sowing leased to others ;CLNDREADSOW;grains
+CLTUCE_TA;CLTUCE_PRQ;Lettuce ;CLTUCE;fruits and vegetables
+CMEDIC_TA;CMEDIC_PRQ;Aromatic plants, medical and culinary plants ;CMEDIC;fruits and vegetables
+CMELON_TA;CMELON_PRQ;Melons ;CMELON;fruits and vegetables
+CMUSH_TA;CMUSH_PRQ;Mushrooms ;CMUSH;fruits and vegetables
+CNURS_TA;;Nurseries ;CNURS;fruits and vegetables
+CNUT_TA;CNUT_PRQ;Nuts ;CNUT;fruits and vegetables
+COLV_TA;COLV_PRQ;Table olives ;COLV;fruits and vegetables
+COLVFR_TA;COLVFR_PRQ;Olives for oil production (sold in fruit) ;COLVFR;fruits and vegetables
+COLVOIL_TA;COLVOIL_PRQ;Olive oil ;COLVOIL;fruits and vegetables
+CONION_TA;CONION_PRQ;Onions ;CONION;tubers
+CORANG_TA;CORANG_PRQ;Oranges ;CORANG;fruits and vegetables
+COTH_TA;;Other ;COTH;grains
+CPEACH_TA;CPEACH_PRQ;Peaches and nectarines ;CPEACH;fruits and vegetables
+CPEAR_TA;CPEAR_PRQ;Pears ;CPEAR;fruits and vegetables
+CPERMUG_TA;;Permanent crops under glass ;CPERMUG;fruits and vegetables
+CRAISIN_TA;CRAISIN_PRQ;Raisins ;CRAISIN;fruits and vegetables
+CRAPE_TA;CRAPE_PRQ;Rape and turnip rape ;CRAPE;grains
+CRENTOUTLND_TA;CRENTOUTLND_PRQ;Receipts from renting out agricultural land ;CRENTOUTLND;grains
+CRG_TA;CRG_PRQ;Rough grazings ;CRG;perenial grasses
+CSNFL_TA;CSNFL_PRQ;Sunflower ;CSNFL;grains
+CSOYA_TA;CSOYA_PRQ;Soya ;CSOYA;soyabean
+CSTRBER_TA;CSTRBER_PRQ;Strawberries ;CSTRBER;fruits and vegetables
+CSUGCN_TA;CSUGCN_PRQ;Sugar cane ;CSUGCN;fruits and vegetables
+CTOMAT_TA;CTOMAT_PRQ;Tomatoes ;CTOMAT;fruits and vegetables
+CUNUSEDLND_TA;;Unutilised agricultural land ;CUNUSEDLND;perenial grasses
+CVEGOTH_TA;CVEGOTH_PRQ;Other vegetables ;CVEGOTH;fruits and vegetables
+CWDED_TA;;Wooded area ;CWDED;fruits and vegetables
+CWINEOTH_TA;CWINEOTH_PRQ;Other wines ;CWINEOTH;fruits and vegetables
+CWINEPDO_TA;CWINEPDO_PRQ;Quality wine with PDO ;CWINEPDO;fruits and vegetables
+CWINEPGI_TA;CWINEPGI_PRQ;Quality wine with PGI ;CWINEPGI;fruits and vegetables
+CWHTD_TA;CWHTD_PRQ;Durum wheat ;CWHTD;wheat
+CRYE_TA;CRYE_PRQ;Rye ;CRYE;rye
+CBRL_TA;CBRL_PRQ;Barley ;CBRL;barley
+COAT_TA;COAT_PRQ;Oats ;COAT;oats
+CMZ_TA;CMZ_PRQ;Grain maize ;CMZ;maize
+CRICE_TA;CRICE_PRQ;Rice ;CRICE;rice
+CPOT_TA;CPOT_PRQ;Potatoes (incl early and seed) ;CPOT;potatoes
+CSUGBT_TA;CSUGBT_PRQ;Sugar beet (excluding seed) ;CSUGBT;tubers
+CHOP_TA;CHOP_PRQ;Hops ;CHOP;barley
+CTOBAC_TA;CTOBAC_PRQ;Tobacco ;CTOBAC;fruits and vegetables
+CPEA_TA;CPEA_PRQ;Peas, field beans and sweet lupines ;CPEA;beans and pulses
+CLNTL_TA;CLNTL_PRQ;Lentils, chickpeas and vetches ;CLNTL;beans and pulses
+;CCRPBY_PRQ;Crop by-products other than from olives and vine Production;CCRPBY;fruits and vegetables
+;COLVBY_PRQ;Olive by-products Production;COLVBY;fruits and vegetables
+;CVINMISC_PRQ;Miscellaneous products of vines produced on the farm Production;CVINMISC;fruits and vegetables
+;CSTRW_PRQ;Straw Production;CSTRW;grains
+;CSUGBTTOP_PRQ;Sugar beet tops Production;CSUGBTTOP;tubers
+;CBYOTH_PRQ;Other by-products Production;CBYOTH;other
+;CVINBY_PRQ;Vine by-products (marc, lees) Production;CVINBY;fruits and vegetables
+CWHTD_TA;CWHTC_PRQ;Common wheat and spelt;CWHTD;wheat
