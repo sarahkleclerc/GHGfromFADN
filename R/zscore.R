@@ -11,7 +11,7 @@
 #' @param group a grouping variable. Default is NULL where no grouping variable.
 #' @param threshold a number. Threshold for z score. We keep z_i<= threshold.
 #'
-#' @return
+#' @return Data without outliers
 #'
 #' @import rlang
 #' @import dplyr
@@ -46,7 +46,7 @@ zscore <- function(data, variable, group = NULL, threshold = 3){
 #' @param threshold a number. Threshold for z score. We keep z_i<= threshold
 #' @param hline a number. Level of the horizontal dash line represented on the plot
 #'
-#' @return
+#' @return Plot of the z-score with thresholds
 #'
 #' @import rlang
 #' @import dplyr
