@@ -1,0 +1,23 @@
+Package: GHGfromFADN
+Title: GHG emissions for FADN data
+Version: 0.0.1
+Authors@R: 
+    person("Sarah", "Le Clerc", , "sarah.le-clerc@inrae.fr", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-0672-5964"))
+Description: GHG emissions from the main productions of the FADN data.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Depends: 
+    R (>= 3.5.0)
+Imports: 
+    dplyr,
+    rlang,
+    ggplot2,
+    gridExtra
+Suggests: 
+    rmarkdown,
+    knitr
+VignetteBuilder: knitr
