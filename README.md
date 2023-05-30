@@ -1,2 +1,1 @@
-# GHGfromFADN
-GHG emissions from FADN data
+# GHGfromFADN: GHG emissions from FADN data
