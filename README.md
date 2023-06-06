@@ -32,7 +32,7 @@ This R package was built using R 4.1.1 and depends on R >= 3.5.0
 
 `install_github("sarahkleclerc/GHGfromFADN")`
 
-**Step 2: Load GHGfromFADN**
+**Step 3: Load GHGfromFADN**
 
 `library(GHGfromFADN)`
 
