@@ -5,6 +5,10 @@
 * [Technology](#technology)
 * [Intallation](#installation)
 * [GHG emissions equations](#ghg-emissions-equations)
+* [Inputs from spendings](#inputs-from-spendings)
+  *  [Fertiliser use](#fertiliser-use)
+  * [Enrgy use](#energy-use)
+  * [Organic manure emissions](#organic-manure-emissions)
 
 ## General infos
 
@@ -49,4 +53,37 @@ Greenhouse gas emissions are estimated based on IPCC tiers 1 guidelines and emis
 | Energy use (inc. production)     | Fuel                  | Equation 3.3.1 ** | Table 3.3.1 **                     |
 
 &#42; IPCC 2006, vol. 4
+
 &#42; &#42; IPCC 2006, vol. 2
+
+Our approach is consistent with previous work that adapted the IPCC framework for to FADN data (Coderoni and Eposti, 2015 ; Dabkiene et al, 2020). That said, to the best of our knowledge we are the first to apply it to the European FADN, which is less detailed than the national FADNs, and to several years.
+
+Fertiliser use before 2014 and fuel use had to be approximated from their value. For more details, see the dedicated section. 
+
+## Inputs from spendings
+
+### Fertiliser use
+
+N content of synthetic fertilisers with FADN data are not available in FADN data before 2014. 
+
+The FADN survey was not initially designed to conduct environmental impact assessments. Some of the physical data necessary to estimate greenhouse gas emissions are not or were not collected. For a few years now (2014 at the earliest and 2017 at the latest, depending on the country), quantities of mineral N inputs in addition to the expenditure on mineral fertiliser is provided. Before this value was collected for all countries we find many outliers and question whether the units were correctly standardised. In the past, others have tried to derive quantities of inorganic fertilisers from the expenditures. Westbury et al. (2011) approach was to divide expenditures on fertiliser inputs by standard price of fertilisers from the Nix Farm Management Pocketbook. Samson et al. (2012) estimate N fertiliser inputs from the area of each crop and the number of animals in each category based on Agreste and Unifa data. At the time, they did not have access to the volume of nitrogen applied to crops through FADN.
+
+Based on 2018 FADN data of conventional (i.e. not organic nor converting to organic farming in 2018) field crop specialist farms, we fit the structural relationship between N inputs and mineral fertiliser expenditure (Equation 1), using the World Bank Fertiliser Price Index to account for the price variation over time (Equation 2).
+
+$$INUSE_Q = \alpha SE295 + \epsilon  (1)$$
+
+In the end we apply Equation 1 to obtain the quantity of fertiliser used in all farms before 2017:
+
+$$ INUSE_Q = 0.00086815 (\frac{\rho_y}{100})^{-1} SE295 + \epsilon (2)$$
+
+$y \in [[2004;2019]]$ indicates the year of prediction. $INUSE_Q$ is the N input in tonnes and SE295 the amount spent on fertilisers inputs expressed in EUR. Finally, $\rho_y \in \mathbb{R}$ is the value of the real price index base 100 in 2018, for the year y.
+
+### Energy use
+
+*Fuels.* Similarly to fertilizers, a conversions from euros to liters is needed for fuel consumption. Fuel prices are obtained from the Weekly Oil Bulletin (Eurostat) which gives details by fuel type, country and with historical depth. We use the gasoline price excluding taxes as it is very similar to off-road diesel prices actually paid by farmers.
+
+*Electricity.* Electricity is excluded from the emission framework for field crops as it is marginal.
+
+### Organic manure emissions
+
+In our framework, emissions from manure are fully allocated to animal products as they are assumed to be waste from production. Manure is commonly given away by livestock farms which supports our "waste" assumption. However, for a few concentrated organic fertilisers such as poultry manure, there is enough demand to create a market, which would then require to attribute manure-related emissions to the cereals on which they are applied. Such an attribution cannot be done with FADN data, as the quantity of manure used is not available. 
