@@ -9,6 +9,7 @@
   *  [Fertiliser use](#fertiliser-use)
   * [Enrgy use](#energy-use)
   * [Organic manure emissions](#organic-manure-emissions)
+* [Usage](#usage)
 
 ## General infos
 
@@ -87,3 +88,100 @@ $y \in [[2004;2019]]$ indicates the year of prediction. $INUSE_Q$ is the N input
 ### Organic manure emissions
 
 In our framework, emissions from manure are fully allocated to animal products as they are assumed to be waste from production. Manure is commonly given away by livestock farms which supports our "waste" assumption. However, for a few concentrated organic fertilisers such as poultry manure, there is enough demand to create a market, which would then require to attribute manure-related emissions to the cereals on which they are applied. Such an attribution cannot be done with FADN data, as the quantity of manure used is not available. 
+
+## Usage 
+
+``` r
+# Load libraries  ---------------------------------------------------------
+library(tidyverse) # general operations
+library(data.table) # data
+library(GHGfromFADN) # use our library
+
+# Parameters --------------------------------------------------------------
+# crops we study
+var_crop <- c("CWHTC", "CBRL", "CMZ")
+var_crop_text <- c("wheat", "barley", "maize")
+var_crop_ha <- paste0(var_crop, "_TA") # area variables (ha)
+var_crop_y <- paste0(var_crop, "_PRQ_kg") # production variables (kg)
+var_crop_yha <- paste0(var_crop, "_YHA_kg") # production/ha
+
+#### The crop we study (1:wheat, 2:barley or 3:maize) -------------------
+i <- 1
+crop <- var_crop[i]
+crop_text <- var_crop_text[i]
+rm(i)
+
+############################# DATA #############################
+# Data preparation (general) -----------------------------------------------
+
+# Load data
+load("FADN.RData")
+
+#### Field crop specialists subset -------
+dfc <-
+  data_fadn %>%
+  # predict INUSE_Q using the function in farmsty package
+  GHGfromFADN::predict_inuse() %>%
+  # Shannon crop diversity index using the function in farmsty package
+  GHGfromFADN::shannon_crop() %>%
+  # Only keep crops specialist farms for now: TF8 == 1
+  filter(TF8 == 1) 
+
+# data.table
+setkey(dfc, id)
+unique(dfc, by = c("id", "COUNTRY", "YEAR"))
+rm(list=setdiff(ls(), c("dfc", "crop", "crop_text")))
+
+#### Remove outliers (INUSE_Q/UAA) -------
+# We use z-score < 3 as a threshold
+
+# Data prep (specific to the crop we study - wheat/barley/maize) ---------------
+#### TA>0 -------
+# Only farms that have surface of the given crop.
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_TA", ">0"))))
+
+#### PRQ>0 -------
+# Only farms that have production of the given crop.
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_PRQ", ">0"))))
+
+#### TO_TOC>0 -------
+# We allocate emissions from fertiliser use according to the contribution of the
+# crop in the overall crops output of the farm. This is done using variables `x_TO_TOC`.
+# The issue is that in total output variables `x_TO`, stocks are included and
+# therefore sometimes stock of the crop x is lower at the end of the year than
+# it was in the beginning of the year.
+# This explains why we have negative emissions for some farms.
+# Later, when we will have the data, we will compute total output excluding stocks.
+# For now, we exclude these observations.
+
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_TO_TOC", ">0"))))
+
+############################# GHG #############################
+# GHG emissions -----------------------------------------------
+
+dfc <- dfc %>%
+  # synthetic N input
+  GHGfromFADN::ghg_fertilisers(crop = crop) %>%
+  # crop residues
+  GHGfromFADN::ghg_cresidues(crop = crop) %>%
+  # fuels: motors and heating
+  GHGfromFADN::ghg_fuels(crop = crop) #%>%
+# electricity
+# GHGfromFADN::ghg_elec(crop = crop, emission_factor = "EU")
+
+# Total emission for crop i at the farm level
+dfc <- dfc %>%
+  mutate(ghg_total = rowSums(select(dfc, ghg_ferti_use, ghg_ferti_prod, ghg_cresidues, ghg_fuels_motors), na.rm = TRUE))
+# NB: ghg_fuels_heat and ghg_elec excluded
+
+# outcome variables
+dfc <- dfc %>%
+  mutate(ghg_total_ha = ghg_total / get(paste0(crop, "_TA"),.),
+         ghg_total_prq = ghg_total / get(paste0(crop, "_PRQ"),.))
+
+# Save dfc for crop i
+saveRDS(dfc, file = paste0("dfc_", crop_text,".rds"))
+```
