@@ -16,3 +16,6 @@ Emissions are expressed in kgCO2eq for each production at the farm level. For no
 
 `install_github("sarahkleclerc/GHGfromFADN")`
 
+**Step 2: Load GHGfromFADN**
+
+`library(GHGfromFADN)`
