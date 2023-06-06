@@ -1,10 +1,10 @@
 Package: GHGfromFADN
 Title: GHG emissions for FADN data
-Version: 0.0.1
+Version: 1.0.0
 Authors@R: 
     person("Sarah", "Le Clerc", , "sarah.le-clerc@inrae.fr", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-0672-5964"))
-Description: GHG emissions from the main productions of the FADN data.
+Description: GHG emissions from the main productions of the FADN data. For now, only main field crop productions and no animal products. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
