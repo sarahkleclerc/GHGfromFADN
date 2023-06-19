@@ -9,6 +9,7 @@
   *  [Fertiliser use](#fertiliser-use)
   * [Enrgy use](#energy-use)
   * [Organic manure emissions](#organic-manure-emissions)
+* [Data available](#data-available)
 * [Usage](#usage)
 
 ## General infos
@@ -88,6 +89,14 @@ $y \in [[2004;2019]]$ indicates the year of prediction. $INUSE_Q$ is the N input
 ### Organic manure emissions
 
 In our framework, emissions from manure are fully allocated to animal products as they are assumed to be waste from production. Manure is commonly given away by livestock farms which supports our "waste" assumption. However, for a few concentrated organic fertilisers such as poultry manure, there is enough demand to create a market, which would then require to attribute manure-related emissions to the cereals on which they are applied. Such an attribution cannot be done with FADN data, as the quantity of manure used is not available. 
+
+## Data available
+
+Three data sets can be loaded from the FADN package: 
+
+ - `dicovars` FADN variable dictionary based on our data request.
+ - `ref_country` Table of European country codes (full name, country code, FADN code, Eurostat code)
+ - `ref_nuts` NUTS region table
 
 ## Usage 
 
