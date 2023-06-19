@@ -55,6 +55,9 @@ To find them (having run `library(GHgfromFADN)` in the console beforehand) in R 
 
 *File > New file... > R Markdown... > From Template*
 
+ - `GHGfromFADN-read-fadn` Fast concatenation of all raw FADN files into one Rdata file.
+ - `GHGfromFADN-crop-ghg` Prepare data and estimate GHG emissions for a given crop production using GHGfromFADN functions. This provides a good usage example of this library functions. 
+
 ## GHG emissions equations
 
 Greenhouse gas emissions are estimated based on IPCC tiers 1 guidelines and emission factors (2006 and 2019 refinements) for most of the emission sources as described in Table 1. The system boundaries are cradle to farm gate: feed production and farming operations are included. Table 1 describes the emission sources included in our estimator for crops. We should add emission sources for animals as well. Most of our data is only available at the farm level and we are interested in the impact at the individual product level. Following LCA principles, we estimate emissions at product level whenever possible (eg. emissions from crop residues are attributed to the relevant crop, emissions from heating are attributed to the relevant animals). For sources of emissions for which an estimate is only possible at a higher level (eg. fertilizers, tractor fuels), the impacts are allocated to the relevant products in proportion to their economic value (International Reference Life Cycle Data System (ILCD) Handbook: General guide for Life Cycle Assessmen, 2010).
