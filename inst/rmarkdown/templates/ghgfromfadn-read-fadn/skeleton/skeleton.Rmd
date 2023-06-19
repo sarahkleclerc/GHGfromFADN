@@ -29,12 +29,12 @@ path_save <- "C:/Users/me/data/FADN_Rdata/"
 And the name of your output R data file:
 ```{r}
 # Must be a string, no dots, no file extension to provide here
-savedata_name <- "fadn_2010_2019"
+savedata_name <- "FADN"
 ```
 
 # Fusion all files
 
-The goal is to end up with a single R data file. In other words we want a file with all countries and years combined.
+The goal is to end up with a single R data file (FADN.RData). In other words we want a file with all countries and years combined.
 
 ```{r}
 # Get the file names in the folder
