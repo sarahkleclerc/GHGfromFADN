@@ -1,0 +1,97 @@
+---
+title: "Read FADN raw data in R"
+author: "Your Name"
+date: "`r format(Sys.time(), '%d/%b/%Y')`"
+output: output_format
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(data.table) # fast read of large data
+library(tidyverse) # data manipulation (but we could do everything with data.table)
+```
+
+Please update the chunk below with the path to the folder containing all your FADN raw files: 
+```{r}
+# NB: path must end with a forward slash symbol (/)
+path <- "C:/Users/me/data/FADN_raw_data/"
+```
+
+Provide here the path to the folder where you wish to save your R data file:
+```{r}
+# NB: path must end with a forward slash symbol (/)
+path_save <- "C:/Users/me/data/FADN_Rdata/"
+```
+
+And the name of your output R data file:
+```{r}
+# Must be a string, no dots, no file extension to provide here
+savedata_name <- "fadn_2010_2019"
+```
+
+# Fusion all files
+
+The goal is to end up with a single R data file. In other words we want a file with all countries and years combined.
+
+```{r}
+# Get the file names in the folder
+all.files <- list.files(path) %>%
+  as_tibble() %>%
+  # Extract country and year
+  mutate(country = stringr::str_sub(value, 1, 3),
+         year = as.numeric(stringr::str_sub(value, 4, 7)))
+
+# We distinguish between files prior to 2015 that do not contain the same variables. 
+
+# Name of files 2004:2015
+b2015.files <- all.files$value[all.files$year < 2015 + 1]
+# Name of files 2016:2019
+a2015.files <- all.files$value[all.files$year > 2015]
+
+# Import files until 2015
+list <-
+  lapply(b2015.files, function(x)
+    fread(paste0(path, x))) # list of tables
+fadn_b <-
+  rbindlist(list) # binding the tables listed into one single data table
+rm(list) # clean the environment
+
+# Import files from 2016
+list <-
+  lapply(a2015.files, function(x)
+    fread(paste0(path, x))) # list of tables
+fadn_a <-
+  rbindlist(list) %>%  # binding the tables listed into one single data table
+  rename(id = ID)
+rm(list) # clean the environment
+
+# Join the two
+data_fadn <- full_join(fadn_b, fadn_a)
+```
+
+```{r}
+# Control that table are properly joined
+data_fadn %>%
+  select(id, countryyear, COUNTRY, YEAR) %>%
+  filter(YEAR %in% c("2015", "2016")) %>%
+  group_by(id) %>%
+  count() %>%
+  filter(n>1)
+```
+
+```{r}
+# Clean environment
+rm(list = setdiff(ls(), "data_fadn"))
+
+# Declare the unique id
+# this is a feature from data.table
+setkey(data_fadn, id)
+unique(data_fadn, by = 'id')
+
+# Save environment
+save.image(paste0(path_save, savedata_name, ".RData"))
+```
+

@@ -1,0 +1,4 @@
+name: GHGfromFADN-read-FADN
+description: >
+   Read FADN raw files and concatenate them into a single R data file (all countries and years combined).
+create_dir: FALSE
