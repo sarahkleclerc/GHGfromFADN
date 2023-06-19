@@ -1,0 +1,6 @@
+name: GHGfromFADN-treatment-organic
+description: >
+   Identifying treated farms when comparing the effect of conversion to organic farming on an outcome. 
+   This is based on sequence analysis and we identify farm that are either always conventional, always 
+   certified organic, or that convert to organic farming when observed in the FADN data. 
+create_dir: FALSE

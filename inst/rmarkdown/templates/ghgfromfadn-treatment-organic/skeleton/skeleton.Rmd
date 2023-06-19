@@ -1,0 +1,89 @@
+---
+title: "Treatment identification: organic farming"
+author: "Your Name"
+date: "`r format(Sys.time(), '%d/%b/%Y')`"
+output: output_format
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Identifying treated farms when comparing the effect of conversion to organic farming on an outcome. 
+This is based on sequence analysis and we identify farm that are either always conventional, always certified organic, or that convert to organic farming when observed in the FADN data... 
+
+```{r}
+# libraries
+library(tidyverse)
+library(GHGfromFADN)
+library(data.table)
+
+library(knitr)
+library(kableExtra)
+
+library(TraMineR)
+```
+
+# Data
+Please update the chunk below with the path to the data: 
+```{r}
+load("C:/Users/me/data/FADN.RData")
+```
+
+```{r}
+# data subset, remove unnecessary columns
+data <- data_fadn %>%
+  select(id, YEAR, COUNTRY, TF14, TF8, ORGANIC)
+
+setkey(data, id)
+unique(data, by = c("id", "COUNTRY", "YEAR"))
+
+rm(data_fadn)
+```
+
+# Sequence analysis
+
+We use sequence analysis functions from TraMineR. 
+They adapt sequence analysis methods (first used to analyse DNA data) to the needs of social sciences researchers: instead of DNA sequences we analyse trajectories and paths taken by people. 
+
+We use this method to identify conversion (to organic farming) trajectories of farms from FADN data. 
+
+```{r}
+# parameters
+palette_organic <- c("#99CCCC", "#CC0066", "#009933", "#6666FF")
+
+# data
+# Shape the dataset for traminer (long format)
+data_tra = data %>%
+  select(id, YEAR, ORGANIC) %>%
+  # Order YEAR from 2004 to 2019
+  arrange(YEAR) %>%
+  # tabular data
+  pivot_wider(names_from = YEAR, names_prefix = "y_", values_from = ORGANIC)
+
+years <- levels(factor(as.character(data$YEAR)))
+```
+
+Alphabet :
+
+  - conventional (C)
+  - Organic (O)
+  - Organic and conventional mix (M)
+  - Converting (K)
+
+Coding void elements with '%' and missing values with '\*'
+
+```{r}
+# define a sequence object (states sequence format)
+seq <-
+  seqdef(
+    data_tra[, 2:ncol(data_tra)],
+    alphabet = c("conventional", "organic", "mix", "converting"),
+    states = c("C", "O", "M", "K"),
+    id = data_tra$id
+  )
+
+# Extract distinct states from sequences (DSS)
+seq_dss <- seqdss(seq)
+```
+
