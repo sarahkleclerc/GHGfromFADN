@@ -1,0 +1,135 @@
+---
+title: "Prepare data and estimate GHG emissions"
+author: "Your Name"
+date: "`r format(Sys.time(), '%d/%b/%Y')`"
+output: output_format
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Libraries
+library(tidyverse) # general operations
+library(data.table) # data
+library(GHGfromFADN) # use our library
+```
+
+```{r}
+# Parameters --------------------------------------------------------------
+# crops we study
+var_crop <- c("CWHTC", "CBRL", "CMZ")
+var_crop_text <- c("wheat", "barley", "maize")
+var_crop_ha <- paste0(var_crop, "_TA") # area variables (ha)
+var_crop_y <- paste0(var_crop, "_PRQ_kg") # production variables (kg)
+var_crop_yha <- paste0(var_crop, "_YHA_kg") # production/ha
+
+#### The crop we study (1:wheat, 2:barley or 3:maize) -------------------
+i <- 1
+crop <- var_crop[i]
+crop_text <- var_crop_text[i]
+rm(i)
+
+# Data 
+# Data prepared following the RMarkdown Template 'ghgfromfadn-read-fadn'
+# Please update your file name and/or path to file
+# Note that this data_path is also used in the end of the script to save the outcome data for crop i
+data_path <- "mydatapath/"
+data_name <- "FADN.RData"
+```
+
+# Data
+```{r}
+load(paste0(data_path, data_name)) 
+```
+
+# Field crop specialists subset
+```{r}
+dfc <-
+  data_fadn %>%
+  # predict INUSE_Q using the function in farmsty package
+  GHGfromFADN::predict_inuse() %>%
+  # Shannon crop diversity index using the function in farmsty package
+  GHGfromFADN::shannon_crop() %>%
+  # Only keep crops specialist farms for now: TF8 == 1
+  filter(TF8 == 1) 
+
+# data.table
+setkey(dfc, id)
+unique(dfc, by = c("id", "COUNTRY", "YEAR"))
+rm(list=setdiff(ls(), c("dfc", "crop", "crop_text")))
+
+# Remove outliers based on fertiliser use per ha (INUSE_Q/UAA)
+# We use z-score < 3 as a threshold 
+dfc <- dfc %>%
+  mutate(inuse_uaa = INUSE_Q_pred / SE025) %>%
+  group_by(COUNTRY) %>%
+  mutate(zscore = (inuse_uaa - mean(inuse_uaa)) / sd(inuse_uaa)) %>%
+  ungroup() %>%
+  filter(zscore <= 3) %>%
+  select(-zscore)
+```
+
+# Crop we study data preparation (wheat/barley/maize)
+```{r}
+#### TA>0 -------
+# Only keep farms that have surface of the given crop.
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_TA", ">0"))))
+
+#### PRQ>0 -------
+# Only keep farms that have production of the given crop.
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_PRQ", ">0"))))
+
+#### TO_TOC>0 -------
+# We allocate emissions from fertiliser use according to the contribution of the
+# crop in the overall crops output of the farm. This is done using variables `x_TO_TOC`.
+# The issue is that in total output variables `x_TO`, stocks are included and
+# therefore sometimes stock of the crop x is lower at the end of the year than
+# it was in the beginning of the year.
+# This explains why we have negative emissions for some farms.
+# Later, when we will have the data, we will compute total output excluding stocks.
+# For now, we exclude these observations.
+
+dfc <- dfc %>%
+  filter(eval(parse(text = paste0(crop, "_TO_TOC", ">0"))))
+```
+
+# GHG emissions
+NB: ghg_fuels_heat and ghg_elec excluded because in principle no fuel for heat and elec in crop productions. 
+Still, functions are provided in GHGfromFADN if you wish to include them anyways.
+
+```{r}
+# GHG emissions -----------------------------------------------
+dfc <- dfc %>%
+  # synthetic N input
+  GHGfromFADN::ghg_fertilisers(crop = crop) %>%
+  # crop residues
+  GHGfromFADN::ghg_cresidues(crop = crop) %>%
+  # fuels: motors and heating
+  GHGfromFADN::ghg_fuels(crop = crop) #%>%
+# electricity
+# GHGfromFADN::ghg_elec(crop = crop, emission_factor = "EU")
+
+
+# Total emission for crop i at the farm level
+dfc <- dfc %>%
+  mutate(ghg_total = rowSums(select(dfc, ghg_ferti_use, ghg_ferti_prod, ghg_cresidues, ghg_fuels_motors), na.rm = TRUE))
+```
+
+```{r}
+# outcome variables: GHG/ha and GHG/ton of product
+dfc <- dfc %>%
+  mutate(ghg_total_ha = ghg_total / get(paste0(crop, "_TA"),.),
+         ghg_total_prq = ghg_total / get(paste0(crop, "_PRQ"),.))
+```
+
+# Save data for crop i 
+```{r}
+# Save dfc for crop i
+# saved to the data_path provided in the beginning of this document
+saveRDS(dfc, file = paste0("data_path", "dfc_", crop_text,".rds")) 
+```
+

@@ -1,0 +1,4 @@
+name: GHGfromFADN-crop-ghg
+description: >
+   Prepare data and use GHGfromFADN functions to estimate GHG emissions for a given crop production.
+create_dir: FALSE
