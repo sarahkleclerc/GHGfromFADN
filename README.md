@@ -109,6 +109,8 @@ In our framework, emissions from manure are fully allocated to animal products a
 
 ## Usage 
 
+See R Markdown Template named GHGfromFADN-crop-ghg
+
 ``` r
 # Load libraries  ---------------------------------------------------------
 library(tidyverse) # general operations
