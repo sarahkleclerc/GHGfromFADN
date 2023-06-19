@@ -1,6 +1,6 @@
 #' Country name codes
 #'
-#' A dataset containing the code of the EU countries.
+#' Table of European country codes.
 #'
 #' @format A data frame with 28 rows and 4 variables:
 #' \describe{
@@ -11,3 +11,13 @@
 #' }
 
 "ref_country"
+
+#' FADN variable dictionary
+#'
+#' FADN variable dictionary based on our data request.
+
+"dicovars"
+
+#' NUTS region table
+
+"ref_nuts"
