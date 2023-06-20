@@ -56,7 +56,15 @@ To find them (having run `library(GHgfromFADN)` in the console beforehand) in R 
 *File > New file... > R Markdown... > From Template*
 
  - `GHGfromFADN-read-fadn` Fast concatenation of all raw FADN files into one Rdata file.
- - `GHGfromFADN-crop-ghg` Prepare data and estimate GHG emissions for a given crop production using GHGfromFADN functions. This provides a good usage example of this library functions. 
+ - `GHGfromFADN-crop-ghg` Prepare data and estimate GHG emissions for a given crop production using GHGfromFADN functions. This provides a good usage example of this library functions.
+
+A few additional patterns are available. These are scripts from our comparison of the effect of converting to organic farming on GHG emissions:
+ 
+ - `GHGfromFADN-treatment-organic` Create a reference table that states the treatment status for each farm id (e.g. treated = organic farm / control = conventional farm).
+ - `GHGfromFADN-organic-seqplot-crop` Count farms and plot conversion sequences for a given crop.
+ - `GHGfromFADN-crop-organic-ghg` Prepare data for the IPW and DID analysis
+ - `GHGfromFADN-crop-organic-ipw` Cross sectional analysis of the impact of the conversion to organic farming on GHG emissions for given crops among wheat/barley/maize. We use IPW and matching methods.
+ - `GHGfromFADN-crop-organic-did` Difference-in-differences analysis of the impact of the conversion to organic farming on GHG emissions for given crops among wheat/barley/maize. We use staggered DID algorithm from Callaway and Sant'Anna.
 
 ## GHG emissions equations
 
