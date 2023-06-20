@@ -63,6 +63,12 @@ readRDS(paste0(path_save_desc, "dfc_", crop_text, ".rds"))
 load("yourpath/ref_didtmt.RData")
 ```
 
+```{r}
+dfc <- dfc %>%
+  left_join(ref_didtmt, by = c("id", "YEAR", "ORGANIC"))
+```
+
+
 # Sequence plots
 ```{r}
 # parameters

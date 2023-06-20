@@ -1,0 +1,131 @@
+---
+title: 'Estimation with panel data: Fieldcrop specialists and effect of conversion to organic farming on GHG emissions'
+author: "Your Name"
+date: "`r format(Sys.time(), '%d/%b/%Y')`"
+output: output_format
+---
+
+Data was prepared in ghg-fcs.R -> templates/GHGfromFADN-crop-organic-ghg
+For some weird reason, ghg-fcs.R script must be run before doing the did estimation. Be careful, you need to pick the right crop in line 24.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)  # ggplot(), %>%, mutate(), and friends
+library(broom)  # Convert models to data frames
+library(did) # staggered did
+
+options(digits = 2)
+```
+
+```{r parameters}
+# Parameters --------------------------------------------------------------
+var_crop <- c("CWHTC", "CBRL", "CMZ")
+var_crop_text <- c("wheat", "barley", "maize")
+var_crop_ha <- paste0(var_crop, "_TA")
+var_crop_y <- paste0(var_crop, "_PRQ_kg")
+var_crop_yha <- paste0(var_crop, "_YHA_kg")
+
+#### The crop we study (1:wheat, 2:barley or 3:maize) -------------------
+i <- 1
+crop <- var_crop[i]
+crop_text <- var_crop_text[i]
+rm(i)
+```
+
+Please update the path where you want the plots and tables to be saved:
+```{r}
+# path to the folder where you want the reference table to be saved in the end of this document: 
+path_data <- "C:/Users/me/data/" # must end with a forward slash
+```
+
+```{r covariates}
+# Covariates
+covariates_cs <- c("YEAR", "REGION", "ALTITUDE", "UAA") #"SIZC"
+
+# function to build formula based on the covariates mentioned above
+fun_formula <- function(y, cov = NULL, x = NULL){
+  if(is.null(cov)){
+    as.formula(paste0(y, "~", x))
+  } else {
+    if(is.null(x)){
+      as.formula(paste0(y, "~", paste(cov, collapse = "+")))
+    } else {
+      as.formula(paste0(y, "~", x, "+", paste(cov, collapse = "+")))
+    }
+  }
+}
+```
+
+# Data
+This is commented because, for some weird reason, the did estimation does not work after loading the RData whereas it works after running the ghg-fcs.R script. Be careful, you need to pick the right crop.
+
+```{r data dfc_did}
+# dfc_did <- readRDS(paste0(path_data, "dfc_did_", crop_text,".rds"))
+
+# load(paste0(path_data, "envir-ghg-fcs_", crop_text,".RData"))
+```
+
+# Staggered DiD without covariates
+## No covariates, unbalanced panel, ghg_total_prq
+```{r did-prod-panel-nocov}
+graphics.off()
+file <- paste0(crop_text, "/did/ghg-fcs-", crop_text, "-prod-panel-nocov")
+
+# estimating the effect on ghg_total/prod
+atts_did_prod_panel_nocov <- 
+  att_gt(yname = "ghg_total_prq_nomix", # outcome variable
+               tname = "YEAR", # time variable
+               idname = "id", # id variable
+               gname = "conversion", # first treatment period variable
+               data = dfc_did, # data
+               xformla = NULL, # no covariates
+               #xformla = ~ REGION, # with covariates
+               est_method = "dr", # estimation using doubly robust estimator
+               control_group = "nevertreated", # comparison group = "nevertreated" or "notyettreated"
+               bstrap = TRUE, # if TRUE compute bootstrapped SE
+               biters = 1000, # number of bootstrap iterations
+               print_details = FALSE, # if TRUE, print detailed results
+               clustervars = "id", # cluster level
+               panel = TRUE, # whether the data is panel or repeated cross-sectional
+               allow_unbalanced_panel = TRUE # we have unbalanced panel data
+)
+```
+
+
+```{r result did-prod-panel-nocov}
+# Aggregate ATT for all treatment years and all years before/after treatment
+agg_effects_did_prod_panel_nocov <- aggte(atts_did_prod_panel_nocov, type = "group", na.rm = TRUE) # NB: we have NA's
+summary(agg_effects_did_prod_panel_nocov)
+
+sink(file = paste0(file, "-atts-aggte.txt"))
+summary(agg_effects_did_prod_panel_nocov)
+sink(file = NULL)
+
+# Group-time ATTs (one group = 1 treatment year)
+summary(atts_did_prod_panel_nocov)
+
+sink(file = paste0(file, "-atts.txt"))
+summary(atts_did_prod_panel_nocov)
+sink(file = NULL)
+
+# Plot group-time ATTs
+ggdid(atts_did_prod_panel_nocov) +
+  labs(subtitle = "Total GHG / ton prod", caption = paste0("No covariates, unbalanced panel \n ", crop_text))
+
+ggsave(paste0(file, "-atts.png"), width = 10, height = 20, units = "in")
+
+# Event-study (aggregates all treatment years but one ATT per year before/after treatment)
+agg_effects_es_did_prod_panel_nocov <- aggte(atts_did_prod_panel_nocov, type = "dynamic", na.rm = TRUE) # NB: we have NA's
+summary(agg_effects_es_did_prod_panel_nocov)
+
+sink(file = paste0(file, "-atts-aggte-es.txt"))
+summary(agg_effects_es_did_prod_panel_nocov)
+sink(file = NULL)
+
+# Plot event-study coefficients
+ggdid(agg_effects_es_did_prod_panel_nocov) +
+  labs(subtitle = "Total GHG / ton prod", caption = paste0("No covariates, unbalanced panel \n ", crop_text))
+
+ggsave(paste0(file, ".png"))
+```

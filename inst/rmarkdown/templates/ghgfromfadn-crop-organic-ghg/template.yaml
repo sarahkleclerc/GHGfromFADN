@@ -1,0 +1,5 @@
+name: GHGfromFADN-crop-organic-ghg
+description: >
+   Prepare data for the IPW and DID analysis 
+   of the impact of conversion to organic farming on GHG emissions.
+create_dir: FALSE

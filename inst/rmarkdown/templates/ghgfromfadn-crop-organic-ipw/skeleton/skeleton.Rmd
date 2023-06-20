@@ -1,0 +1,1181 @@
+---
+title: 'Estimation with repeated cross section data: Fieldcrop specialists'
+author: "Sarah Le Clerc"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+      toc: true
+      toc_float:
+        toc_collapsed: true
+---
+
+# Init
+
+This is a parameterised Markdown R, in the document header: 
+
+  - crop_text = the crop being studied from among "wheat", "barley" and "maize".
+  - runmodel = TRUE to run the model / FALSE to import data with model results saved before. This will impact which chuncks are evaluated (eval = TRUE or FALSE).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)  # ggplot(), %>%, mutate(), and friends
+library(broom)  # Convert models to data frames
+library(MatchIt) # Matching
+library(marginaleffects) # Estimation (matching)
+library(twang) # ps model
+library(survey) # outcome model
+library(cobalt) # ps balance plots
+library(modelsummary)  # Make side-by-side regression tables
+library(AIPW) # Augmented IPW
+library(gtsummary) # Descriptive stat tables
+
+options(digits = 2)
+
+# if runmodel = TRUE then run every model
+# if runmodel = FALSE then load data from before
+runmodel = params$runmodel 
+```
+
+```{r parameters}
+# Parameters --------------------------------------------------------------
+var_crop <- c("CWHTC", "CBRL", "CMZ")
+var_crop_text <- c("wheat", "barley", "maize")
+var_crop_ha <- paste0(var_crop, "_TA")
+var_crop_y <- paste0(var_crop, "_PRQ_kg")
+var_crop_yha <- paste0(var_crop, "_YHA_kg")
+
+#### The crop we study (1:wheat, 2:barley or 3:maize) -------------------
+i <- 1
+crop <- var_crop[i]
+crop_text <- var_crop_text[i]
+rm(i)
+```
+
+Please update the path where you want the plots and tables to be saved:
+```{r}
+# path to the folder where you want the reference table to be saved in the end of this document: 
+path_data <- "C:/Users/me/data/" # must end with a forward slash
+```
+
+```{r covariates}
+# Covariates
+covariates_cs <- c("YEAR", "REGION", "ALTITUDE", "UAA") #"SIZC"
+
+# function to build formula based on the covariates mentioned above
+fun_formula <- function(y, cov = NULL, x = NULL){
+  if(is.null(cov)){
+    as.formula(paste0(y, "~", x))
+  } else {
+    if(is.null(x)){
+      as.formula(paste0(y, "~", paste(cov, collapse = "+")))
+    } else {
+      as.formula(paste0(y, "~", x, "+", paste(cov, collapse = "+")))
+    }
+  }
+}
+```
+
+
+# Data
+
+Data was prepared in ghg-fcs.R
+
+```{r data dfc_cs}
+dfc_cs <- readRDS(paste0(path_data, "dfc_cs_", crop_text, ".rds")) %>%
+  mutate(cs_treat_factor = factor(cs_treat),
+         id_factor = factor(id)) %>% 
+  filter(eval(parse(text = paste0(crop, "_PRQ", ">0"))))
+```
+
+## Descriptive statistics
+```{r descriptive stat}
+descstat <- dfc_cs %>%
+  # from data.table to tibble
+  as_tibble() %>%
+  rename(#UAA = SE025,
+         SHANNON = shannon_cdi,
+         GRASS_UAA = share_tgrass_uaa,
+         GHG_ton = ghg_total_prq,
+         GHG_ha= ghg_total_ha) %>%
+  # Get ton/ha variable for crop studied
+  mutate(YIELD_tonha = get(paste0(crop, "_PRQ"),.)/get(paste0(crop, "_TA"),.),
+         FERTIN_tonha = INUSE_Q_pred/get(paste0(crop, "_TA"),.)) %>% 
+  # Table summary
+  tbl_summary(
+    include = c(UAA, SIZC, ALTITUDE, YIELD_tonha, FERTIN_tonha, SHANNON, GRASS_UAA, COUNTRY), #, GHG_ton, GHG_ha
+    by = ORGANIC,
+    statistic = list(all_continuous() ~ "{mean} ({min}, {max})", all_categorical() ~ "{n} ({p}%)")
+  ) %>%
+  add_overall() %>%
+  modify_header(
+    list(
+      label ~ "**Variable**",
+      all_stat_cols(stat_0 = FALSE) ~ "_{level}_ (n={n}, {style_percent(p)}%)",
+      stat_0 ~ "**TOTAL** (n={N})"
+    )
+  ) %>%
+  # modify_footnote(everything() ~ NA) %>%
+  modify_spanning_header(all_stat_cols() ~ paste0("**", "Fieldcrop specialists, ", crop_text, "**"))
+
+# View
+descstat
+
+# Save
+descstat %>% 	
+  gtsummary::as_kable_extra() %>%
+  kableExtra::save_kable(paste0(crop_text, "/", crop_text, "-descstat-noweights", ".png"))
+```
+
+# Total GHG / ton of product
+This section is repeated three times in the script, once for GHG/ton (here), once for GHG/ha and once for yield. In the future, the two "useless" duplicates could be deleted.
+
+```{r outcome_ghg_prq}
+outcome <- "ghg_total_prq"
+```
+
+
+## Logistic regression
+### Propensity score 
+
+```{r ps_logit_ghg_prq, eval = runmodel}
+ps.logit <-
+  glm(
+    fun_formula("cs_treat_factor", cov = covariates_cs),
+    data = dfc_cs,
+    family = binomial
+  )
+
+save(ps.logit, file = paste0(path_data, "ps_dfc_logit_", crop_text, ".rds"))
+```
+
+```{r load ps_dfc_logit_, eval = !runmodel}
+load(paste0(path_data, "ps_dfc_logit_", crop_text, ".rds"))
+```
+
+```{r}
+dfc_cs$w.logit <- rep(1, nrow(dfc_cs))
+
+dfc_cs$w.logit[dfc_cs$cs_treat == 0] <-
+  exp(predict(ps.logit, subset(dfc_cs, cs_treat == 0)))
+```
+
+
+### Balance checks
+```{r balance_logit_ghg_prq}
+bal.logit <-
+  dx.wts(
+    x = dfc_cs$w.logit,
+    data = dfc_cs,
+    vars = covariates_cs,
+    treat.var = "cs_treat_factor",
+    perm.test.iters = 0,
+    estimand = "ATT"
+  )
+bal.logit
+
+bal.table(bal.logit)
+#  %>% 
+  # filter(std.eff.sz>0.05)
+```
+
+### Logistic regression estimation
+```{r ipw_logit_ghg_prq}
+# Design
+design.logit <- svydesign(ids=~1, weights=~w.logit, data=dfc_cs)
+
+# Estimation
+model_ipw_logit <- svyglm(as.formula(paste0(outcome, "~", "cs_treat_factor")), design=design.logit)
+tidy(model_ipw_logit)
+```
+
+### Logistic regression estimation with covariates in step 2
+```{r ipw_logit_cov_ghg_prq}
+model_ipw_logit_cov <- svyglm(fun_formula(outcome, covariates_cs, "cs_treat_factor"), design=design.logit)
+tidy(model_ipw_logit_cov)
+```
+
+## GBM 
+### Propensity score estimation based on a GBM
+```{r ps_gbm_ghg_prq, eval = runmodel}
+ps_dfc_gbm = ps(
+  fun_formula("cs_treat", cov = covariates_cs),
+  data = dfc_cs,
+  n.trees = 10000,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  estimand = "ATT",
+  stop.method = c("es.mean", "ks.max"), # both stoping rules are computed separately
+  n.minobsinnode = 10,
+  n.keep = 1,
+  n.grid = 25,
+  ks.exact = NULL,
+  verbose = FALSE
+)
+
+save(ps_dfc_gbm, file = paste0(path_data, "ps_dfc_gbm_", crop_text, ".rds"))
+```
+
+```{r load ps_dfc_gbm_, eval = !runmodel}
+load(paste0(path_data, "ps_dfc_gbm_", crop_text, ".rds"))
+```
+
+
+### Checks (balance and others)
+```{r balance_gbm_ghg_prq}
+# convergence diagnostic
+plot(ps_dfc_gbm)
+
+# assess balance of the confounding factors before and after weighting
+dfc_balance <- bal.table(ps_dfc_gbm)
+
+# lack of balance before weighting
+# dfc_balance$unw %>%
+#   filter(abs(std.eff.sz) > 0.05)
+
+# lack of balance after weighting
+dfc_balance$es.mean.ATT %>%
+  filter(abs(std.eff.sz) > 0.05)
+
+dfc_balance$ks.max.ATT %>%
+  filter(abs(std.eff.sz) > 0.05)
+
+summary(ps_dfc_gbm)
+
+# Boxplot of treatment/control propensity scores
+plot(ps_dfc_gbm, plots = "boxplot")
+
+# Standardized effect size of pretreatment variables
+# blue lines: reduction in effect sizes
+# red lines: increase in effect size
+# closed red circles: statistically significant difference
+plot(ps_dfc_gbm, plots = "es")
+
+# p-values for weighted pretreatment variables
+# when the p-values are above the 45-degree line, which represents the cumulative distribution of a uniform variable on [0,1], the p-values are even larger than would be expected in a randomized study.
+plot(ps_dfc_gbm, plots = "t")
+plot(ps_dfc_gbm, plots = "ks")
+
+# Relative influence of each covariate on the treatment assignment
+summary(ps_dfc_gbm$gbm.obj,
+        n.trees = ps_dfc_gbm$desc$es.mean.ATT$n.trees, # NB we chose ES mean criterion
+        plot = FALSE) %>% 
+  knitr::kable(caption = "Relative influence of each covariate on the treatment assignment")
+```
+
+```{r cobalt_plots_gbm}
+# cobalt balance plots
+# love plot 
+cobalt::love.plot(ps_dfc_gbm)
+ggsave(paste0(crop_text, "/ps_loveplots.png"), width = 4, height = 16)
+
+# PS
+cobalt::bal.plot(ps_dfc_gbm, which = "both")
+ggsave(paste0(crop_text, "/ps_balance.png"), width = 6, height = 4)
+```
+
+
+### Weights & design
+```{r design_gbm_ipw}
+# Retrieve GBM propensity as weights for IPW
+dfc_cs$w <- get.weights(ps_dfc_gbm, stop.method="es.mean") # here we chose the method that minimise ES (stoping rule argument)
+
+# Define "design" for functions in package survey (svy...)
+design_ps_ipw <- svydesign(ids=~1, weights=~w, data=dfc_cs)
+```
+
+```{r save-data-ps, eval = runmodel}
+saveRDS(dfc_cs, file = paste0(path_data, "dfc_cs_", crop_text, "_PSW", ".rds"))
+```
+
+### IPW
+
+```{r ipw_ghg_prq}
+# Model IPW simple
+model_ipw <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw)
+
+summary(model_ipw)
+confint(model_ipw)
+
+tidy(model_ipw) %>% 
+  knitr::kable()
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_ghg_prq}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov <-
+  svyglm(fun_formula(outcome, cov = covariates_cs, "cs_treat"),
+    # ghg_total_prq ~ cs_treat + YEAR + REGION + ALTITUDE + SIZC + UAA,
+         design = design_ps_ipw)
+
+summary(model_ipw_fixcov)
+confint(model_ipw_fixcov)
+
+tidy(model_ipw_fixcov) %>% 
+  knitr::kable()
+```
+
+
+### IPW with fixed YEAR and REGION in step 2
+```{r ipw_fix_ghg_prq}
+design_ps_ipw_yr <- svydesign(ids=~1, weights=~w, strata = ~ YEAR + REGION, data=dfc_cs)
+model_ipw_fix <- svyglm(fun_formula(outcome, cov = NULL, "cs_treat"), design=design_ps_ipw_yr)
+# model_ipw_fix <- svyglm(ghg_total ~ cs_treat, design=design_ps_ipw_yr)
+
+summary(model_ipw_fix)
+confint(model_ipw_fix)
+
+tidy(model_ipw_fix) %>% 
+  knitr::kable()
+```
+
+## Exact matching
+R packages:  MatchIt, marginaleffects
+
+### Exact matching YEAR x REGION x ALTITUDE
+
+```{r exact-matching-year-reg-alt}
+# Matching each treated with one control
+em_yearegalt <- matchit(cs_tmt ~ YEAR + REGION + ALTITUDE, 
+                     data = dfc_cs,
+                     estimand = "ATT",
+                     method = "exact")
+
+em_yearegalt
+
+#Extract matched data
+md_yearegalt <- match.data(em_yearegalt)
+
+#head(md_yearegalt)
+summary(factor(dfc_cs$cs_tmt))
+summary(factor(md_yearegalt$cs_tmt))
+
+# Here we follow the procedure described in the matchit package, but the philosophy behind could be questioned. In principle, one would expect to test the difference between each treated and its control, or may be regress this difference 
+# Linear model with covariates
+formula_fit0 <- as.formula(paste0(outcome, "~", "cs_tmt * (", paste(c("YEAR", "REGION", "ALTITUDE"), collapse = "+"), ")"))
+
+fit0 <- lm(formula_fit0,
+           data = md_yearegalt, weights = weights)
+
+# Next, we use marginaleffects::comparisons() to estimate the ATT
+model_em_yra <- marginaleffects::avg_comparisons(
+  model = fit0, # model fit
+  comparison = "difference",
+  variables = "cs_tmt", # name of treatment
+  vcov = ~ subclass, # request cluster-robust SEs;
+  newdata = subset(md_yearegalt, cs_tmt == "treated"), # for ATT
+  wts = "weights" #matching weights (in md) 
+)
+
+model_em_yra
+
+model_em_yra %>% 
+  knitr::kable()
+```
+
+### Exact matching REGION x ALTITUDE
+
+```{r exact-matching-reg-alt}
+em_regalt <- matchit(cs_tmt ~ REGION + ALTITUDE, 
+                     data = dfc_cs,
+                     estimand = "ATT",
+                     method = "exact")
+
+em_regalt
+
+#Extract matched data
+md_regalt <- match.data(em_regalt)
+
+head(md_regalt)
+
+summary(factor(dfc_cs$cs_tmt))
+summary(factor(md_regalt$cs_tmt))
+
+#Linear model with covariates
+formula_fit1 <- as.formula(paste0(outcome, "~", "cs_tmt * (", paste(c("REGION", "ALTITUDE"), collapse = "+"), ")"))
+
+fit1 <- lm(formula_fit1,
+           data = md_regalt, weights = weights)
+
+# Next, we use marginaleffects::comparisons() to estimate the ATT
+model_em_ra <- marginaleffects::avg_comparisons(
+  model = fit1, # model fit
+  comparison = "difference",
+  variables = "cs_tmt", # name of treatment
+  vcov = ~ subclass, # request cluster-robust SEs;
+  newdata = subset(md_regalt, cs_tmt == "treated"), # for ATT
+  wts = "weights" #matching weights (in md) 
+)
+
+model_em_ra
+
+model_em_ra %>% 
+  knitr::kable()
+```
+
+### Exact matching REGION
+
+```{r exact-matching-reg}
+em_reg <- matchit(cs_tmt ~ REGION,
+                     data = dfc_cs,
+                     estimand = "ATT",
+                     method = "exact")
+
+em_reg
+
+#Extract matched data
+md_reg <- match.data(em_reg)
+
+summary(factor(dfc_cs$cs_tmt))
+summary(factor(md_reg$cs_tmt))
+
+#Linear model with covariates
+formula_fit2 <- as.formula(paste0(outcome, "~", "cs_tmt * (", paste(c("REGION"), collapse = "+"), ")"))
+
+fit2 <- lm(formula_fit2,
+           data = md_reg, weights = weights)
+
+# Next, we use marginaleffects::comparisons() to estimate the ATT
+model_em_r <- marginaleffects::avg_comparisons(
+  model = fit2, # model fit
+  comparison = "difference",
+  variables = "cs_tmt", # name of treatment
+  vcov = ~ subclass, # request cluster-robust SEs;
+  newdata = subset(md_reg, cs_tmt == "treated"), # for ATT
+  wts = "weights" #matching weights (in md) 
+)
+
+model_em_r
+
+model_em_r %>% 
+  knitr::kable()
+```
+
+### Coarsen exact matching REGION + ALTITUDE
+```{r cem-matching-reg-alt}
+cem_regalt <- matchit(cs_tmt ~ REGION + ALTITUDE, 
+                     data = dfc_cs,
+                     estimand = "ATT",
+                     method = "cem")
+
+#Extract matched data
+md_cregalt <- match.data(cem_regalt)
+
+summary(factor(dfc_cs$cs_tmt))
+summary(factor(md_cregalt$cs_tmt))
+
+#Linear model with covariates
+formula_fit3 <- as.formula(paste0(outcome, "~", "cs_tmt * (", paste(c("REGION", "ALTITUDE"), collapse = "+"), ")"))
+
+fit3 <- lm(formula_fit3,
+           data = md_cregalt, weights = weights)
+
+# Next, we use marginaleffects::comparisons() to estimate the ATT
+model_cem_ra <- avg_comparisons(fit3, variables = "cs_tmt",
+                vcov = ~subclass,
+                newdata = subset(md_cregalt, cs_tmt == "treated"),
+                wts = "weights")
+
+model_cem_ra
+
+model_cem_ra %>% 
+  knitr::kable()
+```
+
+### Coarsen exact matching YEAR + REGION + ALTITUDE
+```{r cem-matching-year-reg-alt}
+cem_yearegalt <- matchit(cs_tmt ~ YEAR + REGION + ALTITUDE, 
+                     data = dfc_cs,
+                     estimand = "ATT",
+                     method = "cem")
+
+#Extract matched data
+md_cyearegalt <- match.data(cem_yearegalt)
+
+summary(factor(dfc_cs$cs_tmt))
+summary(factor(md_cyearegalt$cs_tmt))
+
+#Linear model with covariates
+formula_fit4 <- as.formula(paste0(outcome, "~", "cs_tmt * (", paste(c("YEAR", "REGION", "ALTITUDE"), collapse = "+"), ")"))
+
+fit4 <- lm(formula_fit3,
+           data = md_cyearegalt, weights = weights)
+
+# Next, we use marginaleffects::comparisons() to estimate the ATT
+model_cem_yra <- avg_comparisons(fit4, variables = "cs_tmt",
+                vcov = ~subclass,
+                newdata = subset(md_cyearegalt, cs_tmt == "treated"),
+                wts = "weights")
+
+model_cem_yra
+
+model_cem_yra %>% 
+  knitr::kable()
+```
+
+
+## Summary
+```{r summary_ghg_prq}
+names(model_ipw_logit$coefficients)[2] <- "cs_treat"
+names(model_ipw_logit_cov$coefficients)[2] <- "cs_treat"
+
+models_list <- list("IPW - logit" = model_ipw_logit,
+                    "IPW - logit and covariates" = model_ipw_logit_cov,
+                    "IPW" = model_ipw,
+                    "IPW with covariates" = model_ipw_fixcov#,
+                    # "IPW fixed year and region" = model_ipw_fix,
+                    # "AIPW" = model_aipw
+                    )
+```
+
+### Table
+```{r summary_table_ghg_prq}
+# Table -------------------------------------------------------------------
+summary_tab <-
+  modelsummary(
+    models_list,
+    estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+    title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  fmt = 2 # nb of digits 
+  )
+
+# Print it
+summary_tab
+# Save it
+summary_tab %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_", outcome, ".png"))
+
+# Only plot organic farming variable
+summary_tab2 <- 
+  modelsummary(
+  models_list,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  coef_rename = c('cs_treat_factor' = 'cs_treat'),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) 
+
+summary_tab2
+
+summary_tab2 %>% 
+  kableExtra::save_kable(paste0(crop_text, "/model_summary_2_", outcome, ".png"))
+```
+
+
+### Plots
+```{r summary_plot_ghg_prq}
+# Plot --------------------------------------------------------------------
+summary_plot <- modelplot(models_list) + ggtitle(paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs, collapse = ","), ")"))
+
+# Print it
+summary_plot
+
+# Save it
+ggsave(plot = summary_plot, filename = paste0(crop_text, "/model_summary_plot", outcome, ".png"), width = 4, height = 16)
+
+# Only plot organic farming variable
+modelplot(models_list, coef_map = "cs_treat",title = paste0(crop_text, ", ", outcome))
+ggsave(paste0(crop_text, "/model_summary_plot_2_", outcome, ".png"))
+```
+
+# Total GHG / ha
+
+```{r outcome_ghg_ha}
+outcome <- "ghg_total_ha"
+```
+
+
+## Logistic regression
+
+### Logistic regression estimation
+```{r ipw_logit_ghg_ha}
+model_ipw_logit_ha <- svyglm(as.formula(paste0(outcome, "~", "cs_treat_factor")), design=design.logit)
+tidy(model_ipw_logit_ha)
+```
+
+### Logistic regression estimation with covariates in step 2
+```{r ipw_logit_cov_ghg_ha}
+model_ipw_logit_cov_ha <- svyglm(fun_formula(outcome, covariates_cs, "cs_treat_factor"), design=design.logit)
+tidy(model_ipw_logit_cov_ha)
+```
+
+## GBM 
+
+### IPW
+
+```{r ipw_ghg_ha}
+# Model IPW simple
+model_ipw_ha <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw)
+
+summary(model_ipw_ha)
+confint(model_ipw_ha)
+
+tidy(model_ipw_ha)
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_ghg_ha}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov_ha <-
+  svyglm(fun_formula(outcome, cov = covariates_cs, "cs_treat"),
+    # ghg_total_prq ~ cs_treat + YEAR + REGION + ALTITUDE + SIZC + UAA,
+         design = design_ps_ipw)
+
+summary(model_ipw_fixcov_ha)
+confint(model_ipw_fixcov_ha)
+
+tidy(model_ipw_fixcov_ha)
+```
+
+## Summary
+```{r summary_ghg_ha}
+names(model_ipw_logit_ha$coefficients)[2] <- "cs_treat"
+names(model_ipw_logit_cov_ha$coefficients)[2] <- "cs_treat"
+
+models_list_ha <- list("IPW - logit" = model_ipw_logit_ha,
+                    "IPW - logit and covariates" = model_ipw_logit_cov_ha,
+                    "IPW" = model_ipw_ha,
+                    "IPW covariates" = model_ipw_fixcov_ha#,
+                    # "IPW fixed year and region" = model_ipw_fix_ha
+                    )
+```
+
+### Table
+```{r summary_table_ghg_ha}
+# Table -------------------------------------------------------------------
+summary_tab_ha <-
+  modelsummary(
+    models_list_ha,
+    estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+    title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ha (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  fmt = 2 # nb of digits 
+  )
+
+# Print it
+summary_tab_ha
+# Save it
+summary_tab_ha %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_", outcome, ".png"))
+
+# Only plot organic farming variable
+modelsummary(
+  models_list_ha,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ha (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_2_", outcome, ".png"))
+```
+
+
+### Plots
+```{r summary_plot_ghg_ha}
+# Plot --------------------------------------------------------------------
+summary_plot_ha <- modelplot(models_list_ha, title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ha (Covariates: ", paste0(covariates_cs, collapse = ","), ")"))
+
+# Print it
+summary_plot_ha
+
+# Save it
+ggsave(plot = summary_plot_ha, filename = paste0(crop_text, "/model_summary_plot", outcome, ".png"), width = 4, height = 16)
+
+# Only plot organic farming variable
+modelplot(models_list_ha, coef_map = "cs_treat", title = paste0(crop_text, ", ", outcome))
+ggsave(paste0(crop_text, "/model_summary_plot_2_", outcome, ".png"))
+```
+
+
+# Yield (ton)
+```{r outcome_yield}
+outcome <- paste0(crop, "_PRQ")
+```
+
+
+## Logistic regression
+
+### Logistic regression estimation
+```{r ipw_logit_yield}
+model_ipw_logit_yield <- svyglm(as.formula(paste0(outcome, "~", "cs_treat_factor")), design=design.logit)
+tidy(model_ipw_logit_yield)
+```
+
+### Logistic regression estimation with covariates in step 2
+```{r ipw_logit_cov_yield}
+model_ipw_logit_cov_yield <- svyglm(fun_formula(outcome, covariates_cs, "cs_treat_factor"), design=design.logit)
+tidy(model_ipw_logit_cov_yield)
+```
+
+## GBM 
+
+### IPW
+
+```{r ipw_yield}
+# Model IPW simple
+model_ipw_yield <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw)
+
+summary(model_ipw_yield)
+confint(model_ipw_yield)
+
+tidy(model_ipw_yield)
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_yield}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov_yield <-
+  svyglm(fun_formula(outcome, cov = covariates_cs, "cs_treat"),
+    # ghg_total_prq ~ cs_treat + YEAR + REGION + ALTITUDE + SIZC + UAA,
+         design = design_ps_ipw)
+
+summary(model_ipw_fixcov_yield)
+confint(model_ipw_fixcov_yield)
+
+tidy(model_ipw_fixcov_yield)
+```
+
+## Summary
+```{r summary_yield}
+names(model_ipw_logit_yield$coefficients)[2] <- "cs_treat"
+names(model_ipw_logit_cov_yield$coefficients)[2] <- "cs_treat"
+
+models_list_yield <- list("IPW - logit" = model_ipw_logit_yield,
+                    "IPW - logit and covariates" = model_ipw_logit_cov_yield,
+                    "IPW" = model_ipw_yield,
+                    "IPW covariates" = model_ipw_fixcov_yield#,
+                    # "IPW fixed year and region" = model_ipw_fix_yield
+                    )
+```
+
+### Table
+```{r summary_table_yield}
+# Table -------------------------------------------------------------------
+summary_tab_yield <-
+  modelsummary(
+    models_list_yield,
+    estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+    title = paste0("ATT for ", crop_text, ", yield in tons (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  fmt = 2 # nb of digits 
+  )
+
+# Print it
+summary_tab_yield
+# Save it
+summary_tab_yield %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_", outcome, ".png"))
+
+# Only plot organic farming variable
+modelsummary(
+  models_list_yield,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", yield in tons (Covariates: ", paste0(covariates_cs, collapse = ","), ")"),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_2_", outcome, ".png"))
+```
+
+
+### Plots
+```{r summary_plot_yield}
+# Plot --------------------------------------------------------------------
+summary_plot_yield <- modelplot(models_list_yield, title = paste0("ATT for ", crop_text, ", yield in tons (Covariates: ", paste0(covariates_cs, collapse = ","), ")"))
+
+# Print it
+summary_plot_yield
+
+# Save it
+ggsave(plot = summary_plot_yield, filename = paste0(crop_text, "/model_summary_plot", outcome, ".png"), width = 4, height = 16)
+
+# Only plot organic farming variable
+modelplot(models_list_yield, coef_map = "cs_treat", title = paste0(crop_text, ", ", outcome))
+ggsave(paste0(crop_text, "/model_summary_plot_2_", outcome, ".png"))
+```
+
+# Robustness
+```{r outcome_robustness}
+outcome <- "ghg_total_prq"
+```
+
+## With SIZC in controls
+SIZC is the "economic size class" of the farm
+```{r covariates_cs_sizc}
+covariates_cs_sizc <- c(covariates_cs, "SIZC")
+```
+
+```{r run ps_gbm_ghg_prq_sizc, eval = runmodel}
+ps_dfc_gbm_sizc = ps(
+  fun_formula("cs_treat", cov = covariates_cs_sizc),
+  data = dfc_cs,
+  n.trees = 10000,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  estimand = "ATT",
+  stop.method = "es.mean", 
+  n.minobsinnode = 10,
+  n.keep = 1,
+  n.grid = 25,
+  ks.exact = NULL,
+  verbose = FALSE
+)
+
+save(ps_dfc_gbm_sizc, file = paste0(path_data, "ps_dfc_gbm_sizc_", crop_text, ".rds"))
+```
+
+```{r load ps_dfc_gbm_sizc, eval = !runmodel}
+load(paste0("data_ignore/ps_dfc_gbm_sizc_", crop_text, ".rds"))
+```
+
+
+```{r design_gbm_ipw_sizc}
+# IPW weights
+### Design
+dfc_cs$w_sizc <- get.weights(ps_dfc_gbm_sizc, stop.method="es.mean") # here we chose the method that minimise ES (stoping rule argument)
+
+design_ps_ipw_sizc <- svydesign(ids=~1, weights=~w_sizc, data=dfc_cs)
+```
+
+### IPW
+
+```{r ipw_ghg_prq_sizc}
+# Model IPW simple
+model_ipw_sizc <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw_sizc)
+
+summary(model_ipw_sizc)
+confint(model_ipw_sizc)
+
+tidy(model_ipw_sizc)
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_ghg_prq_sizc}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov_sizc <-
+  svyglm(fun_formula(outcome, cov = covariates_cs_sizc, "cs_treat"),
+         design = design_ps_ipw_sizc)
+
+summary(model_ipw_fixcov_sizc)
+confint(model_ipw_fixcov_sizc)
+
+tidy(model_ipw_fixcov_sizc)
+```
+
+### Summary
+```{r summary_ipw_ghg_prq_sizc}
+models_list_prq_sizc <- list("IPW" = model_ipw_sizc,
+                    "IPW covariates" = model_ipw_fixcov_sizc#,
+                    # "IPW fixed year and region" = model_ipw_fix_yield
+                    )
+```
+
+```{r summary_ipw_table_ghg_prq_sizc}
+# Only plot organic farming variable
+modelsummary(
+  models_list_prq_sizc,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs_sizc, collapse = ","), ")"),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_2_sizc_", outcome, ".png"))
+```
+
+
+
+## Exclude UAA from controls
+
+```{r covariates_cs_nouaa}
+covariates_cs_nouaa <- covariates_cs[covariates_cs != "UAA"]
+```
+
+```{r ps_gbm_ghg_prq_nouaa, eval = runmodel}
+ps_dfc_gbm_nouaa = ps(
+  fun_formula("cs_treat", cov = covariates_cs_nouaa),
+  data = dfc_cs,
+  n.trees = 10000,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  estimand = "ATT",
+  stop.method = "es.mean", 
+  n.minobsinnode = 10,
+  n.keep = 1,
+  n.grid = 25,
+  ks.exact = NULL,
+  verbose = FALSE
+)
+
+save(ps_dfc_gbm_nouaa, file = paste0(path_data, "ps_dfc_gbm_nouaa_", crop_text, ".rds"))
+```
+
+```{r load ps_dfc_gbm_nouaa, eval = !runmodel}
+load(paste0("path_data, ps_dfc_gbm_nouaa_", crop_text, ".rds"))
+```
+
+
+```{r design_gbm_ipw_nouaa}
+# IPW weights
+### Design
+dfc_cs$w_nouaa <- get.weights(ps_dfc_gbm_nouaa, stop.method="es.mean") # here we chose the method that minimise ES (stoping rule argument)
+
+design_ps_ipw_nouaa <- svydesign(ids=~1, weights=~w_nouaa, data=dfc_cs)
+```
+
+### IPW
+
+```{r ipw_ghg_prq_nouaa}
+# Model IPW simple
+model_ipw_nouaa <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw_nouaa)
+
+summary(model_ipw_nouaa)
+confint(model_ipw_nouaa)
+
+tidy(model_ipw_nouaa)
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_ghg_prq_nouaa}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov_nouaa <-
+  svyglm(fun_formula(outcome, cov = covariates_cs_nouaa, "cs_treat"),
+         design = design_ps_ipw_nouaa)
+
+summary(model_ipw_fixcov_nouaa)
+confint(model_ipw_fixcov_nouaa)
+
+tidy(model_ipw_fixcov_nouaa)
+```
+
+### Summary
+```{r summary_ghg_prq_nouaa}
+models_list_prq_nouaa <- list("IPW" = model_ipw_nouaa,
+                    "IPW covariates" = model_ipw_fixcov_nouaa
+                    )
+```
+
+```{r summary_table_yield_nouaa}
+# Only plot organic farming variable
+modelsummary(
+  models_list_prq_nouaa,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs_nouaa, collapse = ","), ")"),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_2_nouaa_", outcome, ".png"))
+```
+
+## Effect from 2017
+Prior to 2017 we derive the fertilizer quantities from the expenses (GHGfromFADN::predict_inuse). Here we check that the effect for the years where the actual quantities are reported in the FADN (year > 2016) is the same. 
+
+```{r ps_gbm_ghg_prq_2017, eval = runmodel}
+from2017 <- as.numeric(levels(dfc_cs$YEAR))[as.numeric(levels(dfc_cs$YEAR))>2016]
+
+dfc_cs_2017 <- dfc_cs %>% filter(YEAR %in% from2017)
+
+ps_dfc_gbm_2017 = ps(
+  fun_formula("cs_treat", cov = covariates_cs),
+  data = dfc_cs_2017,
+  n.trees = 10000,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  estimand = "ATT",
+  stop.method = "es.mean", 
+  n.minobsinnode = 10,
+  n.keep = 1,
+  n.grid = 25,
+  ks.exact = NULL,
+  verbose = FALSE
+)
+
+rm(from2017)
+
+save(dfc_cs_2017, file = paste0(path_data, "dfc_cs_2017_", crop_text, ".rds"))
+save(ps_dfc_gbm_2017, file = paste0(path_data, "ps_dfc_gbm_2017_", crop_text, ".rds"))
+```
+
+```{r load ps_dfc_gbm_2017, eval = !runmodel}
+load(paste0(path_data, "dfc_cs_2017_", crop_text, ".rds"))
+load(paste0(path_data, "ps_dfc_gbm_2017_", crop_text, ".rds"))
+```
+
+```{r design_gbm_ipw_2017}
+# IPW weights
+### Design
+dfc_cs_2017$w_2017 <- get.weights(ps_dfc_gbm_2017, stop.method="es.mean") # here we chose the method that minimise ES (stoping rule argument)
+
+design_ps_ipw_2017 <- svydesign(ids=~1, weights=~w_2017, data=dfc_cs_2017)
+```
+
+### IPW
+
+```{r ipw_ghg_prq_2017}
+# Model IPW simple
+model_ipw_2017 <- svyglm(as.formula(paste0(outcome, "~", "cs_treat")), design=design_ps_ipw_2017)
+
+summary(model_ipw_2017)
+confint(model_ipw_2017)
+
+tidy(model_ipw_2017)
+```
+
+### IPW with covariates in step 2
+```{r ipw_fixcov_ghg_prq_2017}
+# fit a weighted model to estimate the ATT
+model_ipw_fixcov_2017 <-
+  svyglm(fun_formula(outcome, cov = covariates_cs, "cs_treat"),
+         design = design_ps_ipw_2017)
+
+summary(model_ipw_fixcov_2017)
+confint(model_ipw_fixcov_2017)
+
+tidy(model_ipw_fixcov_2017)
+```
+
+### Summary
+```{r summary_ghg_prq_2017}
+models_list_prq_2017 <- list("IPW" = model_ipw_2017,
+                    "IPW covariates" = model_ipw_fixcov_2017
+                    )
+```
+
+```{r summary_table_yield_2017}
+# Only plot organic farming variable
+modelsummary(
+  models_list_prq_2017,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  title = paste0("ATT for ", crop_text, ", emissions in kgCO2e/ton (Covariates: ", paste0(covariates_cs, collapse = ","), " and YEAR from 2017)"),
+  coef_omit = c(-1, -2),
+  fmt = 2 # nb of digits 
+) %>% kableExtra::save_kable(paste0(crop_text, "/model_summary_2_from2017_", outcome, ".png"))
+```
+
+# Discussion
+```{r outcome_discussion}
+outcome <- "ghg_total_prq"
+```
+
+## Plotting elements for the discussion section of the article
+```{r all_summary_plots}
+modelplot(models_list, coef_map = "cs_treat", title = paste0(crop_text, ", ", outcome)) + ggtitle(paste0("GHG_ton \n", crop_text))
+modelplot(models_list_ha, coef_map = "cs_treat", title = paste0(crop_text, ", ", outcome)) + ggtitle(paste0("GHG_ha \n", crop_text))
+modelplot(models_list_yield, coef_map = "cs_treat", title = paste0(crop_text, ", ", outcome)) + ggtitle(paste0("Yield \n", crop_text))
+
+# summary_plot
+# summary_plot_ha
+# summary_plot_yield
+```
+
+```{r models_discussion}
+models_list_discussion <-
+  list(
+    "IPW_ghg_ton" = model_ipw_fixcov,
+    "IPW_ghg_ha" = model_ipw_fixcov_ha,
+    "IPW_yield" = model_ipw_fixcov_yield
+  )
+
+modelplot(models_list_discussion, coef_map = "cs_treat") + 
+  ggtitle(paste0("Lower per ha emissions are offset by lower yields \n", crop_text))
+
+ggsave(paste0(crop_text, "/discussion_ghg_yield", ".png"))
+```
+
+## % of difference
+Expressing results as a % of conventional average instead of absolute value in tCO2e/ton
+```{r percent_diff_means}
+############ Weighted means
+wm <- dfc_cs %>%
+  # Yield / ha
+  mutate(yha = get(paste0(crop, "_PRQ")) / get(paste0(crop, "_TA")),
+         ghg_ha_yield_ha = ghg_total_ha / get(paste0(crop, "_TA"))) %>% 
+  group_by(cs_treat) %>% 
+  summarise(ghg_total_prq_wm = sum(ghg_total_prq * w) / sum(w),
+            ghg_total_ha_wm = sum(ghg_total_ha * w) / sum(w),
+            yield_wm = sum(get(paste0(crop, "_PRQ")) * w) / sum(w),
+            ha_wm = sum(get(paste0(crop, "_TA"))*w) / sum(w),
+            yield_ha_wm = sum(yha * w) / sum(w),
+            ghg_ha_yield_ha_wm = sum(ghg_ha_yield_ha * w) / sum(w)) 
+#print
+wm
+#save
+wm %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_paper() %>% 
+  kableExtra::save_kable(paste0(crop_text, "/weighted_means_", crop_text, ".png"))
+
+############ Difference(proportion)
+diff_wm <- wm %>% 
+  summarise(diff_ghg_prq = (ghg_total_prq_wm[cs_treat == 1] - ghg_total_prq_wm[cs_treat == 0])/ghg_total_prq_wm[cs_treat == 0],
+            diff_ghg_ha = (ghg_total_ha_wm[cs_treat == 1] - ghg_total_ha_wm[cs_treat == 0])/ghg_total_ha_wm[cs_treat == 0],
+            diff_yield =(yield_wm[cs_treat == 1] - yield_wm[cs_treat == 0])/yield_wm[cs_treat == 0],
+            diff_yield_ha = (yield_ha_wm[cs_treat == 1] - yield_ha_wm[cs_treat == 0])/yield_ha_wm[cs_treat == 0],
+            diff_ghg_ha_yield_ha = (ghg_ha_yield_ha_wm[cs_treat == 1] - ghg_ha_yield_ha_wm[cs_treat == 0])/ghg_ha_yield_ha_wm[cs_treat == 0])
+#print
+diff_wm
+#save
+diff_wm %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_paper() %>% 
+  kableExtra::save_kable(paste0(crop_text, "/weighted_means_difference_", crop_text, ".png"))
+
+# Plot
+diff_wm %>% 
+  select(diff_ghg_prq, diff_ghg_ha, diff_yield_ha, diff_ghg_ha_yield_ha) %>% 
+  pivot_longer(everything(), names_to="Model", values_to = "Estimate") %>% 
+  mutate(Model = factor(c("GHG_ton", "GHG_ha", "Yield_ha", "GHG_ha/yield_ha"), ordered = TRUE, levels = c("GHG_ton", "GHG_ha", "Yield_ha", "GHG_ha/yield_ha"))) %>% 
+ggplot(aes(y = Estimate, x = Model, label = paste0(round(Estimate * 100), " %"))) +
+  geom_hline(yintercept = 0, color = "grey") +
+  geom_point() +
+  scale_y_continuous(labels = percent) + 
+  geom_text(hjust=.2, vjust=-1) +
+  labs(y = "Difference to conventional farms", x = "") + #caption = "95% confidence intervals"
+  theme_classic()
+#save the plot
+ggsave(paste0(crop_text, "/discussion_ghg_yield_percent_diff_",crop_text,  ".png"))
+```
+
+# Organic manure emissions
+
+We computed the average use of manure (N/ha) using agricultural practices french survey (PKGC 2017). From these data the average difference in emissions from organic manure of organic vs. conventional farm inputs is calculated.
+
+```{r organic_manure_ghg}
+pk_manure <- tibble(crop = c("wheat", "wheat", "barley", "barley", "maize", "maize"),
+                    organic = c(0,1,0,1,0,1),
+                    manure_n_ha = c(9.04, 52.82, 16.23, 37.73, 49.50, 110.35))
+
+# Organic farms
+ghg_manure_organic = 44/28*298*(0.007*1.2+0.0075*0.3)*pk_manure$manure_n_ha[pk_manure$crop == crop_text & pk_manure$organic == 1]*wm$ha_wm[wm$cs_treat == 1]
+# ghg/ton
+ghg_manure_organic_ton = ghg_manure_organic / wm$yield_wm[wm$cs_treat == 1]
+
+# Conventional farms
+ghg_manure_conv =  44/28*298*(0.007*1.2+0.0075*0.3)*pk_manure$manure_n_ha[pk_manure$crop == crop_text & pk_manure$organic == 0]*wm$ha_wm[wm$cs_treat == 0]
+# ghg/ton
+ghg_manure_conv_ton = ghg_manure_conv / wm$yield_wm[wm$cs_treat == 0]
+
+# Difference
+ ghg_manure_organic_ton - ghg_manure_conv_ton
+
+# Difference to IPW GBM covar
+model_ipw_fixcov$coefficients["cs_treat"] - (ghg_manure_conv_ton - ghg_manure_organic_ton)
+
+# Relative difference 
+wm %>% 
+  mutate(ghg_manure_prq = if_else(cs_treat == 0, ghg_manure_conv_ton, 
+                                  if_else(cs_treat == 1, ghg_manure_organic_ton, NA_real_))) %>% 
+  mutate(ghg_totman_prq = if_else(cs_treat == 0, ghg_total_prq_wm[cs_treat == 0] + ghg_manure_conv_ton, 
+                                  if_else(cs_treat == 1, ghg_total_prq_wm[cs_treat == 1] + ghg_manure_organic_ton, NA_real_))) %>% 
+  mutate(rel.difference = (ghg_totman_prq[cs_treat == 1] - ghg_totman_prq[cs_treat == 0])/ghg_totman_prq[cs_treat == 0])
+```
+
+```{r summary-organic-manure}
+tibble(crop = crop_text,
+       ghg_exc_manure = model_ipw_fixcov$coefficients["cs_treat"],
+       ghg_manure = ghg_manure_organic_ton - ghg_manure_conv_ton,
+       total = ghg_exc_manure + ghg_manure,
+       rel.difference = wm$rel.difference)
+
+tibble(crop = crop_text,
+       ghg_exc_manure = model_ipw_fixcov$coefficients["cs_treat"],
+       ghg_manure = ghg_manure_organic_ton - ghg_manure_conv_ton,
+       total = ghg_exc_manure + ghg_manure,
+       rel.difference = wm$rel.difference) %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_paper() %>% 
+  kableExtra::save_kable(paste0(crop_text, "/ghg_manure_", crop_text, ".png"))
+```
+

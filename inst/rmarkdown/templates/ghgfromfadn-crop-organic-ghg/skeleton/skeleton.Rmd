@@ -1,0 +1,152 @@
+---
+title: "Impact of the conversion to organic farming on GHG emissions: data preparation"
+author: "Your Name"
+date: "`r format(Sys.time(), '%d/%b/%Y')`"
+output: output_format
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# libraries
+library(tidyverse)
+library(GHGfromFADN)
+library(data.table)
+
+library(knitr)
+library(kableExtra)
+
+library(TraMineR)
+```
+
+```{r}
+# Parameters --------------------------------------------------------------
+# crops we study
+var_crop <- c("CWHTC", "CBRL", "CMZ")
+var_crop_text <- c("wheat", "barley", "maize")
+var_crop_ha <- paste0(var_crop, "_TA") # area variables (ha)
+var_crop_y <- paste0(var_crop, "_PRQ_kg") # production variables (kg)
+var_crop_yha <- paste0(var_crop, "_YHA_kg") # production/ha
+
+#### The crop we study (1:wheat, 2:barley or 3:maize) -------------------
+i <- 1
+crop <- var_crop[i]
+crop_text <- var_crop_text[i]
+rm(i)
+```
+
+Please update the path where you want the plots and tables to be saved:
+```{r}
+# path to the folder where you want the reference table to be saved in the end of this document: 
+path_out_data <- "C:/Users/me/data/" # must end with a forward slash
+```
+
+# Data
+Please update the chunk below with the correct path to the data: 
+
+```{r}
+# Load data from templates/GHGfromFADN-crop-ghg 
+readRDS(paste0(path_save_desc, "dfc_", crop_text, ".rds"))
+
+# Load data from templates/GHGfromFADN-treatment-organic
+load("yourpath/ref_didtmt.RData")
+```
+
+```{r}
+dfc <- dfc %>%
+  left_join(ref_didtmt, by = c("id", "YEAR", "ORGANIC"))
+```
+
+
+# DID Panel conversion to organic farming
+
+```{r}
+# R script for DID analysis: estimation-fcs-did.R
+
+dfc <- dfc %>%
+  mutate(ghg_total = rowSums(select(dfc, ghg_ferti_use, ghg_ferti_prod, ghg_cresidues, ghg_fuels_motors), na.rm = TRUE))
+# NB: ghg_fuels_heat and ghg_elec excluded
+
+# outcome variables
+dfc <- dfc %>%
+  mutate(ghg_total_ha = ghg_total / get(paste0(crop, "_TA"),.),
+         ghg_total_prq = ghg_total / get(paste0(crop, "_PRQ"),.))
+
+dfc_did <- dfc %>%
+  filter(!is.na(did_tmt)) %>%
+  # Untreated units have conversion year of 0
+  mutate(conversion = if_else(is.na(conversion), 0, conversion)) %>%
+  # YEAR relative to conversion year for treated
+  mutate(rel_year = if_else(did_tmt == "treated", YEAR - conversion, Inf)) %>%
+  # did_tmt_num
+  mutate(did_tmt_num = if_else(did_tmt == "treated", 1, if_else(did_tmt == "control", 0, NA_real_))) %>%
+  # Rename standard variables
+  mutate(UAA = SE025) %>%
+  # Remove mix observations : C-M-O -> C-*-O
+  mutate(ghg_total_prq_nomix = if_else(did_tmt == "treated" & ORGANIC == "mix", NA_real_, ghg_total_prq),
+         ghg_total_ha_nomix = if_else(did_tmt == "treated" & ORGANIC == "mix", NA_real_, ghg_total_ha),
+         yield = get(paste0(crop, "_PRQ"), .),
+         yield_ha = yield / UAA,
+         yield_nomix = if_else(did_tmt == "treated" & ORGANIC == "mix", NA_real_, yield),
+         yield_ha_nomix = if_else(did_tmt == "treated" & ORGANIC == "mix", NA_real_, yield_ha),
+         # GHG Ferti N
+         ghg_ferti_tot_prq = ghg_ferti_use + ghg_ferti_prod,
+         ghg_ferti_tot_prq_nomix = if_else(did_tmt == "treated" & ORGANIC == "mix", NA_real_, ghg_ferti_tot_prq)) %>%
+  # Good covariate definition
+  # NB: here YEAR must be numeric
+  mutate_at(c("ALTITUDE", "TF8", "TF14", "REGION", "SIZC", "LFA"),
+            function(x) factor(x)) %>%
+  mutate(YEAR = as.numeric(as.character(YEAR)))
+
+# Save dfc_did
+saveRDS(dfc_did, file = paste0(path_out_data, "dfc_did_", crop_text,".rds"))
+```
+
+# DID panel deconversion
+```{r}
+dfc_did_dec <- dfc %>%
+  filter(!is.na(did_tmt_dec)) %>%
+  # Untreated units have deconversion year of 0
+  mutate(deconversion = if_else(is.na(deconversion), 0, deconversion)) %>%
+  # Remove mix observations : C-M-O -> C-*-O
+  mutate(ghg_total_prq_nomix_dec = if_else(did_tmt_dec == "treated" & ORGANIC == "mix", NA_real_, ghg_total_prq),
+         ghg_total_ha_nomix_dec = if_else(did_tmt_dec == "treated" & ORGANIC == "mix", NA_real_, ghg_total_ha)) %>%
+  # Rename standard variables
+  mutate(UAA = SE025) %>%
+  # Good covariate definition
+  # NB: here YEAR must be numeric
+  mutate_at(c("ALTITUDE", "TF8", "TF14", "REGION", "SIZC", "LFA"),
+            function(x) factor(x)) %>%
+  mutate(YEAR = as.numeric(as.character(YEAR)))
+
+# Save dfc_did
+saveRDS(dfc_did_dec, file = paste0(path_out_data, "dfc_did_dec_", crop_text,".rds"))
+```
+
+# Cross section 
+```{r}
+# Treated units: ids that are organic (ORGANIC == organic)
+# Controls: ids that are conventional (ORGANIC == conventional)
+
+dfc_cs <- dfc %>%
+  mutate(cs_tmt = case_when(
+    ORGANIC == "organic" ~ "treated",
+    ORGANIC == "conventional" ~ "control"
+  )) %>%
+  mutate(cs_treat = case_when(
+    cs_tmt == "treated" ~ 1,
+    cs_tmt == "control" ~ 0
+  )) %>%
+  # Rename standard variables
+  mutate(UAA = SE025) %>%
+  # Good covariate definition
+  mutate_at(c("YEAR", "ALTITUDE", "TF8", "TF14", "REGION", "SIZC", "LFA"),
+            function(x) factor(x)) %>%
+  filter(!is.na(cs_tmt)) %>%
+  as.data.frame()
+
+# Save dfc_cs
+saveRDS(dfc_cs, file = paste0(path_out_data, "dfc_cs_", crop_text,".rds"))
+```
