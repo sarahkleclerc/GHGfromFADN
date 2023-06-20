@@ -33,15 +33,14 @@ rm(i)
 
 # Data 
 # Data prepared following the RMarkdown Template 'ghgfromfadn-read-fadn'
-# Please update your file name and/or path to file
+# Please update path to file
 # Note that this data_path is also used in the end of the script to save the outcome data for crop i
-data_path <- "mydatapath/"
-data_name <- "FADN.RData"
+data_path <- "C:/Users/me/data/"
 ```
 
 # Data
 ```{r}
-load(paste0(data_path, data_name)) 
+load(paste0(data_path, "FADN.RData")) 
 ```
 
 # Field crop specialists subset
@@ -130,6 +129,6 @@ dfc <- dfc %>%
 ```{r}
 # Save dfc for crop i
 # saved to the data_path provided in the beginning of this document
-saveRDS(dfc, file = paste0("data_path", "dfc_", crop_text,".rds")) 
+saveRDS(dfc, file = paste0(data_path, "dfc_", crop_text,".rds")) 
 ```
 
