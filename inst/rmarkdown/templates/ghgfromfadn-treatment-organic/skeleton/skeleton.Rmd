@@ -28,6 +28,10 @@ library(TraMineR)
 Please update the chunk below with the path to the data: 
 ```{r}
 load("C:/Users/me/data/FADN.RData")
+
+# path to the folder where you want the reference table to be saved in the end of this document: 
+path_out_data <- "C:/Users/me/data/" # must end with a forward slash
+path_out_plots <- "C:/Users/me/out/"
 ```
 
 ```{r}
@@ -85,5 +89,456 @@ seq <-
 
 # Extract distinct states from sequences (DSS)
 seq_dss <- seqdss(seq)
+```
+
+## Controls 
+
+```{r}
+# Sequence of events that are considered as control:
+# - conventional
+
+# We exclude sequences that converted back to conventional,
+# as well as farms that convert later to something else.
+
+# We want the id of farms that always were conventional when observed in the panel
+# We want farms that only have one state which is conventional
+# if there is no state 2 (ST2=="%") then there is only one state observed in the panel, we want it to be ST1 == "conventional"
+index_control <- which(seq_dss$ST2 == "%" & seq_dss$ST1 == "C")
+
+# Conventional subset of the data:
+id_control <- data_tra$id[index_control]
+
+# Count conventional farms:
+length(id_control)
+
+seq_control <-
+  seqdef(
+    data_tra[index_control, 2:ncol(data_tra)],
+    alphabet = c("conventional", "organic", "mix", "converting"),
+    states = c("C", "O", "M", "K"),
+    id = id_control
+  )
+
+# plot sequences
+# seqiplot(seq_control, with.legend = "right", cpal = palette_organic, missing.color = "white", idxs = 1:50)
+png(file=paste0(path_out_plots, "seq/", "seqiplot-control.png"),
+    width=600, height=10000)
+seqiplot(seq_control, with.legend = "right", cpal = palette_organic, missing.color = "white", idxs = 1:2000, main = paste0("2 000 first sequences", "\n N controls = ", nrow(seq_control)))
+dev.off()
+```
+
+## Controls - deconversion 
+
+Sequence of events that are considered as control:
+  - conventional
+
+We exclude sequences that converted back to conventional, as well as farms that convert later to something else.
+
+We want the id of farms that always were conventional when observed in the panel
+We want farms that only have one state which is conventional if there is no state 2 (ST2=="%") then there is only one state observed in the panel, we want it to be ST1 == "conventional"
+
+```{r}
+condec_1 <- seq_dss$ST3 == "%" & seq_dss$ST2 == "%" & seq_dss$ST1 == "O"
+condec_2 <- seq_dss$ST3 == "%" & seq_dss$ST2 == "O" & seq_dss$ST1 == "K"
+
+index_control_dec <- which(condec_1 | condec_2)
+
+# Conventional subset of the data:
+id_control_dec <- data_tra$id[index_control_dec]
+
+# Count conventional farms:
+length(id_control_dec)
+
+seq_control_dec <-
+  seqdef(
+    data_tra[index_control_dec, 2:ncol(data_tra)],
+    alphabet = c("conventional", "organic", "mix", "converting"),
+    states = c("C", "O", "M", "K"),
+    id = id_control_dec
+  )
+
+# plot sequences
+# seqiplot(seq_control, with.legend = "right", cpal = palette_organic, missing.color = "white", idxs = 1:50)
+png(file=paste0(path_out_plots, "seq/", "seqiplot-control-deconversion.png"),
+    width=600, height=10000)
+seqiplot(
+  seq_control_dec,
+  with.legend = "right",
+  cpal = palette_organic,
+  missing.color = "white",
+  idxs = 1:2000,
+  main = paste0(
+    "2 000 first sequences",
+    "\n N controls deconversion = ",
+    nrow(seq_control_dec)
+  )
+)
+dev.off()
+```
+
+## Count
+### Conversion
+```{r}
+# All sequences ----------
+c <- seq_dss %>% filter(ST2 == "%" & ST1 == "C") %>% count() %>% pull()
+co <- seq_dss %>% filter(ST3 == "%" & ST2 == "O" & ST1 == "C") %>% count() %>% pull()
+coc <- seq_dss %>% filter(ST4 == "%" & ST3 == "C" & ST2 == "O" & ST1 == "C") %>% count() %>% pull()
+coco <- seq_dss %>% filter(ST5 == "%" & ST4 == "O" & ST3 == "C" & ST2 == "O" & ST1 == "C") %>% count() %>% pull()
+
+o <- seq_dss %>% filter(ST2 == "%" & ST1 == "O") %>% count() %>% pull()
+
+cko <- seq_dss %>% filter(ST4 == "%" & ST3 == "O" & ST2 == "K" & ST1 == "C") %>% count() %>% pull()
+cmo <- seq_dss %>% filter(ST4 == "%" & ST3 == "O" & ST2 == "M" & ST1 == "C") %>% count() %>% pull()
+
+ckmkmo <- seq_dss %>% filter(ST5 == "%" & ST4 == "O" & ST3 %in% c("M", "K") & ST2 %in% c("M", "K") & ST1 == "C") %>% count() %>% pull()
+
+other <- nrow(seq_dss) - sum(c, co, coc, coco, o, cko, cmo, ckmkmo, na.rm = T)
+
+tab <-
+  tibble(Sequence = c("C", "C-O", "C-O-C", "C-O-C-O", "O", "C-K-O",
+                      "C-M-O", "C-K/M-K/M-O", "Other"),
+         N = c(c, co, coc, coco, o, cko, cmo, ckmkmo, other)) %>%
+  kbl(caption = "Sample size by sequence type - All farms") %>%
+  footnote("C: conventional  O: organic  K: converting  M: mix  %: missing data") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria", font_size=16)
+
+# tab
+
+tab %>%
+  save_kable(file = paste0(path_out_plots, "seq/", "count-seq.png"))
+
+```
+
+### Deconversion
+```{r}
+oc <- seq_dss %>% filter(ST1 == "O" & ST2 == "C" & ST3 == "%") %>% count() %>% pull()
+koc <- seq_dss %>% filter(ST1 == "K" & ST2 == "O" & ST3 == "C" & ST4 == "%") %>% count() %>% pull()
+komc <- seq_dss %>% filter(ST1 == "K" & ST2 == "O" & ST3 == "M" & ST4 == "C" & ST5 == "%") %>% count() %>% pull()
+omc <- seq_dss %>% filter(ST1 == "O" & ST2 == "M" & ST3 == "C" & ST4 == "%") %>% count() %>% pull()
+
+# organic
+o <- seq_dss %>% filter(ST1 == "O" & ST2 == "%") %>% count() %>% pull()
+ko <- seq_dss %>% filter(ST1 == "K" & ST2 == "O" & ST3 == "%") %>% count() %>% pull()
+
+total_treat <- sum(oc, koc, komc, omc, na.rm = T)
+total_contr <- sum(o, ko, na.rm = T)
+tab <- tibble('Sequences' = c("O-C", "K-O-C", "K-O-M-C", "O-M-C", "TOTAL treated", "O", "K-O", "TOTAL controls"),
+              N = c(oc, koc, komc, omc, total_treat, o, ko, total_contr)) %>%
+  kbl(caption = "Sample size by sequence type - All farms") %>%
+  footnote("C: conventional  O: organic  K: converting  M: mix  %: missing data") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria", font_size=16)
+
+# tab
+tab %>%
+  save_kable(file = paste0(path_out_plots, "seq/", "count-seq-treat-off.png"))
+```
+
+## Treated
+
+```{r}
+# Sequence of events that are considered as treatment:
+# - conventional \> converting/mix \> organic \> %
+# - conventional \> converting \> mix \> organic \> %
+# - conventional \> organic \> %
+
+message(
+  "Sequence of events that are considered as treatment:
+\n - conventional > converting/mix > organic > %
+\n - conventional > converting > mix > organic > %
+\n - conventional > organic > %"
+)
+
+# conventional > converting/mix > organic (> ...)
+treat_1 <-
+  seq_dss$ST1 == "C" &
+  seq_dss$ST2 %in% c("K", "M") &
+  seq_dss$ST3 == "O" &
+  seq_dss$ST4 == "%"
+# conventional > converting/mix > mix/converting > organic (> ...)
+treat_2 <-
+  seq_dss$ST1 == "C" &
+  seq_dss$ST2 %in% c("K", "M") &
+  # (seq_dss$ST2 == "K" | seq_dss$ST2 == "M") &
+  seq_dss$ST3 %in% c("K", "M") &
+  # (seq_dss$ST3 == "K" | seq_dss$ST3 == "M") &
+  seq_dss$ST4 == "O" &
+  seq_dss$ST5 == "%"
+# conventional > organic (> ...)
+treat_3 <-
+  seq_dss$ST1 == "C" &
+  seq_dss$ST2 == "O" &
+  seq_dss$ST3 == "%"
+
+index_treated <- which(treat_1 | treat_2 | treat_3)
+
+# Subset of the data:
+id_treated <- data_tra$id[index_treated]
+
+# Count conventional farms:
+length(id_treated)
+
+# seq
+seq_treated <-
+  seqdef(
+    data_tra[index_treated, 2:ncol(data_tra)],
+    alphabet = c("conventional", "organic", "mix", "converting"),
+    states = c("C", "O", "M", "K"),
+    id = id_treated
+  )
+
+# plot sequences
+# seqiplot(seq_treated, with.legend = "right", cpal = palette_organic, idxs = 0)
+png(file=paste0(path_out_plots, "seq/", "seqiplot-treated.png"),
+    width=600, height=10000)
+seqiplot(seq_treated, with.legend = "right", cpal = palette_organic, missing.color = "white", idxs = 0, main = paste0("\n N treated = ", nrow(seq_treated)))
+dev.off()
+
+```
+
+## Treated - deconversion
+```{r}
+# organic > conventional
+treadec_1 <-
+  seq_dss$ST1 == "O" &
+  seq_dss$ST2 == "C" &
+  seq_dss$ST3 == "%" &
+  seq_dss$ST4 == "%"
+# converting > organic > conventional
+treadec_2 <-
+  seq_dss$ST1 == "K" &
+  seq_dss$ST2 == "O" &
+  seq_dss$ST3 == "C" &
+  seq_dss$ST4 == "%" &
+  seq_dss$ST5 == "%"
+
+index_treated_dec <- which(treadec_1 | treadec_2)
+
+# Subset of the data:
+id_treated_dec <- data_tra$id[index_treated_dec]
+
+# Count conventional farms:
+length(id_treated_dec)
+
+# seq
+seq_treated_dec <-
+  seqdef(
+    data_tra[index_treated_dec, 2:ncol(data_tra)],
+    alphabet = c("conventional", "organic", "mix", "converting"),
+    states = c("C", "O", "M", "K"),
+    id = id_treated_dec
+  )
+
+# plot sequences
+# seqiplot(seq_treated, with.legend = "right", cpal = palette_organic, idxs = 0)
+png(file=paste0(path_out_plots, "seq/", "seqiplot-treated-deconversion.png"),
+    width=600, height=10000)
+seqiplot(
+  seq_treated_dec,
+  with.legend = "right",
+  cpal = palette_organic,
+  missing.color = "white",
+  idxs = 0,
+  main = paste0("\n N treated deconversion = ", nrow(seq_treated_dec))
+)
+dev.off()
+```
+
+# Reference treatment table
+
+```{r}
+# create a reference table of id treated and control for the did analysis
+ref_didtmt <- data.table(id = data$id) %>%
+  # keep one row per unique id
+  distinct()
+
+# Parameters for data.table
+setkey(ref_didtmt, id)
+unique(ref_didtmt, by = 'id')
+
+# Add logical vectors to identify control and treated id
+ref_didtmt = ref_didtmt %>%
+  mutate(did_control = if_else(id %in% id_control, 1, 0),
+         did_treated = if_else(id %in% id_treated, 1, 0),
+         did_tmt = case_when(did_control == 1 ~ "control",
+                              did_treated == 1 ~ "treated"),
+         # deconversion
+         did_control_dec = if_else(id %in% id_control_dec, 1, 0),
+         did_treated_dec = if_else(id %in% id_treated_dec, 1, 0),
+         did_tmt_dec = case_when(did_control_dec == 1 ~ "control",
+                             did_treated_dec == 1 ~ "treated"))
+```
+
+```{r}
+data <- left_join(data, ref_didtmt, by = c("id" = "id"))
+```
+
+## Identify conversion year
+```{r}
+# We use the SPELL sequence format.
+
+seq_spell <-
+  seqformat(
+    seq_treated,
+    id = seq_treated$id, # seq_treated: only treated sequences
+    from = "STS",
+    to = "SPELL",
+    with.missing = FALSE
+  )
+
+# For now we focus on sequences that are C-O / C-K-O / C-M-O / C-K-M-O.
+# Say that conversion is after being conventional
+# i.e. first time that the event in the sequence is not "conventional".
+
+# I take the second state for each id
+# Conversion occurs in the period in "begin"
+seq_spell <- as.data.table(seq_spell)
+
+setkey(seq_spell, id)
+unique(seq_spell, by = 'id')
+
+# seq_spell[, conversion := as.numeric(years[1]) + begin[2L] - 1, by = id][] # conversion is the second state. Error because sometimes there is a seq like C-*-C-O.
+
+# intermediate calculation: select 1st row that is not conventional
+inter = seq_spell[states %in% c("O", "M", "K"), .SD[1], by = id]
+inter[, conversion := as.numeric(years[1]) + begin[1L] - 1, by = id][]
+
+# join conversion year to seq_spell
+seq_spell = full_join(seq_spell, inter[, .(id, conversion)])
+
+# clean
+seq_spell[, .(id, conversion)]
+seq_spell[, id := bit64::as.integer64(id)]
+
+id_treat_conv <- unique(seq_spell[, .(id, conversion)])
+
+# Add the conversion year to the ref table ref_didtmt
+ref_didtmt <- merge(ref_didtmt, id_treat_conv, by = "id", all.x = TRUE)
+
+ref_didtmt[, id := bit64::as.integer64(id)]
+
+# and to data
+data <- left_join(data, ref_didtmt[, c("id", "conversion")], by = c("id" = "id"))
+
+# We set conversion year to t_conv = 0.
+data <- data %>%
+  mutate(t_conv = YEAR - conversion)
+```
+
+## Identify deconversion year
+```{r}
+# We use the SPELL sequence format.
+
+seq_spell_dec <-
+  seqformat(
+    seq_treated_dec,
+    id = seq_treated_dec$id, # seq_treated: only treated sequences
+    from = "STS",
+    to = "SPELL",
+    with.missing = FALSE
+  )
+
+# For now we focus on sequences that are C-O / C-K-O / C-M-O / C-K-M-O.
+# Say that conversion is after being conventional
+# i.e. first time that the event in the sequence is not "conventional".
+
+# I take the second state for each id
+# Conversion occurs in the period in "begin"
+seq_spell_dec <- as.data.table(seq_spell_dec)
+
+setkey(seq_spell_dec, id)
+unique(seq_spell_dec, by = 'id')
+
+# intermediate calculation: select 1st row that IS conventional
+inter_dec = seq_spell_dec[states =="C", .SD[1], by = 'id']
+inter_dec[, deconversion := as.numeric(years[1]) + begin[1L] - 1, by = id][]
+
+# join conversion year to seq_spell
+seq_spell_dec = full_join(seq_spell_dec, inter_dec[, .(id, deconversion)])
+
+# clean
+seq_spell_dec[, .(id, deconversion)]
+seq_spell_dec[, id := bit64::as.integer64(id)]
+
+id_treat_deconv <- unique(seq_spell_dec[, .(id, deconversion)])
+
+# Add the conversion year to the ref table ref_didtmt
+ref_didtmt <- merge(ref_didtmt, id_treat_deconv, by = "id", all.x = TRUE)
+
+ref_didtmt[, id := bit64::as.integer64(id)]
+
+
+# and to data
+data <- left_join(data, ref_didtmt[, c("id", "deconversion")],
+                  by = c("id" = "id"))
+
+# We set conversion year to t_deconv = 0.
+data <- data %>%
+  mutate(t_deconv = YEAR - deconversion)
+
+
+# Clean environment
+rm(list=setdiff(ls(), c("data", "ref_didtmt", "crop", "crop_text")))
+```
+
+## Some additional data preparation
+
+*We follow Callaway & Sant'Anna (2021) framework for staggered treatment analysis.* We shape the treatment status in our data to meet their requirements.
+
+```{r}
+# Treatment status
+data <- data %>%
+  mutate(treat_status = case_when(did_tmt == "control" ~ 0,
+                                  did_tmt == "treated" & ORGANIC == "conventional" ~ 0,
+                                  did_tmt == "treated" & ORGANIC != "conventional" ~ 1)) %>%
+  mutate(treat_status_dec = case_when(did_tmt_dec == "control" ~ 0,
+                                      did_tmt_dec == "treated" & ORGANIC == "conventional" ~ 0,
+                                      did_tmt_dec == "treated" & ORGANIC != "conventional" ~ 1))
+
+ref_didtmt <- left_join(ref_didtmt, data[, .(id, did_tmt, did_tmt_dec, conversion, deconversion, YEAR, ORGANIC, treat_status, treat_status_dec)],
+                        by = c("id", "did_tmt", "did_tmt_dec", "conversion", "deconversion"))
+
+# We analyse a **treatment effect for each group of farms**.
+# Groups are noted $G_g$ such as $g$ is the year of conversion.
+# In our data we identified treatment date in `conversion`.
+# Let's create groups following this conversion date.
+# prepare data for this operation
+data_g = data[,.(id, conversion, did_tmt)]
+data_g = data_g[!is.na(conversion),]
+data_g = unique(data_g)
+
+# Cast data (from long to wide)
+groups = dcast(data_g,
+               id + did_tmt ~ paste0("group_", conversion),
+               value.var = "conversion")
+# we want a binary vector
+cols <- setdiff(names(groups), "id")
+groups[, (cols) := lapply(.SD, function(x){if_else(is.na(x), 0, 1)}), # 1: treated units in year t
+       .SDcols = cols]
+# merge to data
+data = merge(data, groups[, !c("did_tmt")], by = "id", all.x = TRUE)
+# merge to ref_didtmt
+ref_didtmt = merge(ref_didtmt, groups[, !c("did_tmt")], by = "id", all.x = TRUE)
+
+## Same for deconversion
+data_g_dec = data[,.(id, deconversion, did_tmt_dec)]
+data_g_dec = data_g_dec[!is.na(deconversion),]
+data_g_dec = unique(data_g_dec)
+# Cast data (from long to wide)
+groups_dec = dcast(data_g_dec,
+               id + did_tmt_dec ~ paste0("group_", deconversion),
+               value.var = "deconversion")
+# we want a binary vector
+cols_dec <- setdiff(names(groups_dec), "id")
+groups_dec[, (cols_dec) := lapply(.SD, function(x){if_else(is.na(x), 0, 1)}), # 1: treated units in year t
+       .SDcols = cols_dec]
+# merge to data
+data = merge(data, groups_dec[, !c("did_tmt_dec")], by = "id", all.x = TRUE)
+# merge to ref_didtmt
+ref_didtmt = merge(ref_didtmt, groups_dec[, !c("did_tmt_dec")], by = "id", all.x = TRUE)
+```
+
+# Save ref_did_tmt table
+```{r}
+save.image(paste0(path_out_data, "ref_didtmt.RData"))
 ```
 
