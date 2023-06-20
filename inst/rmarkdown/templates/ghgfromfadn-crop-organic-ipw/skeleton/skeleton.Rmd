@@ -1,6 +1,6 @@
 ---
 title: 'Estimation with repeated cross section data: Fieldcrop specialists'
-author: "Sarah Le Clerc"
+author: "Your Name"
 date: "`r Sys.Date()`"
 output: 
   html_document:
