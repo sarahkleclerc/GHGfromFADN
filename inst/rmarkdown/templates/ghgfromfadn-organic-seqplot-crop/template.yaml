@@ -1,0 +1,4 @@
+name: GHGfromFADN-organic-seqplot-crop
+description: >
+   Sequence plots for a given crop.
+create_dir: FALSE
