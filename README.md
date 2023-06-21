@@ -79,7 +79,7 @@ Reinstall the updated package: next to the environment in R Studio is the "Build
 
 **Update an existing template:**
 
-Go to the folder bearing the name of the model in question.
+Go to the folder bearing the name of the template.
 Modify the skeleton.Rmd file.
 Reinstall the updated package: next to the environment in R Studio is the "Build" tab, containing the "Install and restart" button.
 
