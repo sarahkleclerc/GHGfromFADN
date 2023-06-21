@@ -1,4 +1,4 @@
-name: GHGfromFADN-treatment-organic
+name: GHGfromFADN-organic-treatment
 description: >
    Identifying treated farms when comparing the effect of conversion to organic farming on an outcome. 
    This is based on sequence analysis and we identify farm that are either always conventional, always 

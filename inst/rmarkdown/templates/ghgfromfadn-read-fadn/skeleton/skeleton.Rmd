@@ -73,16 +73,6 @@ data_fadn <- full_join(fadn_b, fadn_a)
 ```
 
 ```{r}
-# Control that table are properly joined
-data_fadn %>%
-  select(id, countryyear, COUNTRY, YEAR) %>%
-  filter(YEAR %in% c("2015", "2016")) %>%
-  group_by(id) %>%
-  count() %>%
-  filter(n>1)
-```
-
-```{r}
 # Clean environment
 rm(list = setdiff(ls(), "data_fadn"))
 
