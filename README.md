@@ -77,7 +77,7 @@ In this folder, open a folder called "skeleton" and a file describing the templa
 Place the markdown template, also called "skeleton.Rmd", in the skeleton folder.
 Reinstall the updated package: next to the environment in R Studio is the "Build" tab, containing the "Install and restart" button.
 
-**Update an existing model:**
+**Update an existing template:**
 
 Go to the folder bearing the name of the model in question.
 Modify the skeleton.Rmd file.
